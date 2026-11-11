@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "erp-desk"
+version = "1.0.0"
+description = "Modulares ERP-System (Stammdaten, Vertrieb, Einkauf, Lager, Finanzen) als Desktop-Client mit gemeinsamer Datenbank"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "PySide6-Essentials>=6.6",
+    "SQLAlchemy>=2.0",
+    "psycopg2-binary>=2.9",
+]
+
+[project.optional-dependencies]
+mysql = ["PyMySQL>=1.1"]
+dev = ["pytest>=8", "pyinstaller>=6"]
+
+[project.gui-scripts]
+erp-desk = "erp.__main__:run"
+
+[tool.setuptools.packages.find]
+include = ["erp*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

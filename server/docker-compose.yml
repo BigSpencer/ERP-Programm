@@ -1,0 +1,33 @@
+# Zentrale Datenbank für alle ERP-Arbeitsplätze.
+# Start:   docker compose up -d
+# Danach in jedem Client: Datenbanktyp PostgreSQL, Server = IP/Name dieses Rechners, Port 5432.
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: erp
+      POSTGRES_USER: erp
+      POSTGRES_PASSWORD: ${ERP_DB_PASSWORD:-bitte-aendern}
+      TZ: Europe/Berlin
+    ports:
+      - "5432:5432"
+    volumes:
+      - erp-data:/var/lib/postgresql/data
+
+  # Tägliche Sicherung nach ./backup (Aufbewahrung 14 Tage, siehe backup.sh)
+  backup:
+    image: postgres:16
+    restart: unless-stopped
+    depends_on: [db]
+    environment:
+      PGHOST: db
+      PGUSER: erp
+      PGPASSWORD: ${ERP_DB_PASSWORD:-bitte-aendern}
+    volumes:
+      - ./backup:/backup
+      - ./backup.sh:/backup.sh:ro
+    entrypoint: ["sh", "/backup.sh"]
+
+volumes:
+  erp-data:
