@@ -13,7 +13,11 @@ from PySide6.QtWidgets import (
 
 from .. import APP_NAME, __version__, config, db
 from .. import models as m
-from ..services import BusinessError, auth, set_user
+from ..services import BusinessError, auth, get_setting, set_user
+from .dealer import (
+    CockpitPage, ShowroomPage, UsedPurchasesPage, VehicleModelsPage, VehicleOrdersPage, VehiclesPage,
+    sales_module as vehicle_sales_module,
+)
 from .documents import InvoicesPage, PurchaseOrdersPage, SalesOrdersPage
 from .masterdata import CustomersPage, ProductsPage, SuppliersPage
 from .modules import DashboardPage, admin_module, finance_module, inventory_module
@@ -223,14 +227,21 @@ class LoginDialog(QDialog):
 
 MODULES = [
     # key, Bezeichnung, Gruppe, Fabrik
-    ("dashboard", "Übersicht", "Start", DashboardPage),
+    ("cockpit", "Cockpit", "Autohaus", CockpitPage),
+    ("vehicles", "Fahrzeugbestand", "Autohaus", VehiclesPage),
+    ("showroom", "Ausstellung", "Autohaus", ShowroomPage),
+    ("vehicle_orders", "Bestellungen", "Autohaus", VehicleOrdersPage),
+    ("vehicle_sales", "Verkauf", "Autohaus", vehicle_sales_module),
+    ("used_purchases", "Gebrauchtwagen-Ankauf", "Autohaus", UsedPurchasesPage),
     ("customers", "Kunden", "Stammdaten", CustomersPage),
+    ("vehicle_models", "Fahrzeugkatalog", "Stammdaten", VehicleModelsPage),
     ("suppliers", "Lieferanten", "Stammdaten", SuppliersPage),
-    ("products", "Artikel / Material", "Stammdaten", ProductsPage),
-    ("sales", "Kundenaufträge", "Vertrieb (SD)", SalesOrdersPage),
-    ("invoices", "Rechnungen", "Vertrieb (SD)", InvoicesPage),
-    ("purchasing", "Bestellungen", "Einkauf (MM)", PurchaseOrdersPage),
-    ("inventory", "Lager", "Materialwirtschaft", inventory_module),
+    ("products", "Teile / Zubehör", "Stammdaten", ProductsPage),
+    ("dashboard", "Übersicht Werkstatt & Teile", "Teile & Service", DashboardPage),
+    ("sales", "Kundenaufträge", "Teile & Service", SalesOrdersPage),
+    ("invoices", "Rechnungen", "Teile & Service", InvoicesPage),
+    ("purchasing", "Teilebestellungen", "Teile & Service", PurchaseOrdersPage),
+    ("inventory", "Teilelager", "Teile & Service", inventory_module),
     ("finance", "Finanzbuchhaltung", "Rechnungswesen (FI)", finance_module),
     ("admin", "Administration", "System", admin_module),
 ]
@@ -240,7 +251,8 @@ class MainWindow(QMainWindow):
     def __init__(self, user: m.User):
         super().__init__()
         self.user = user
-        self.setWindowTitle(f"{APP_NAME} {__version__} – {user.full_name or user.username}")
+        company = run(None, lambda s: get_setting(s, "company_name")) or APP_NAME
+        self.setWindowTitle(f"{company} – {APP_NAME} {__version__} – {user.full_name or user.username}")
         self.resize(1360, 820)
         self.nav = QListWidget()
         self.nav.setObjectName("nav")
@@ -305,8 +317,9 @@ class MainWindow(QMainWindow):
         f.addAction(QAction("Beenden", self, shortcut="Ctrl+Q", triggered=self.close))
         h = mb.addMenu("&Hilfe")
         h.addAction(QAction("Über …", self, triggered=lambda: QMessageBox.about(
-            self, APP_NAME, f"<b>{APP_NAME} {__version__}</b><br>Integriertes ERP-System für "
-            "Stammdaten, Vertrieb, Einkauf, Lager und Finanzbuchhaltung.<br><br>"
+            self, APP_NAME, f"<b>{APP_NAME} {__version__}</b><br>ERP-System für das Autohaus: "
+            "Fahrzeugbestand, Ausstellung, Bestellungen, Verkauf, Gebrauchtwagen-Ankauf, Kunden, "
+            "Teile/Lager und Finanzbuchhaltung.<br><br>"
             "Lokal installierter Client mit gemeinsamer zentraler Datenbank.")))
 
     def _switch(self, item, _prev=None):
@@ -323,7 +336,8 @@ class MainWindow(QMainWindow):
             page.refresh()
 
     def _auto_refresh(self):
-        if QApplication.activeModalWidget() is None and isinstance(self.stack.currentWidget(), DashboardPage):
+        if QApplication.activeModalWidget() is None and isinstance(self.stack.currentWidget(),
+                                                                   (DashboardPage, CockpitPage)):
             self.refresh_current()
 
     def _change_password(self):

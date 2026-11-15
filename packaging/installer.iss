@@ -3,7 +3,7 @@
 ; Dann mit Inno Setup 6 kompilieren:  iscc packaging\installer.iss
 
 #define AppName "ERP Desk"
-#define AppVersion "1.0.0"
+#define AppVersion "1.1.0"
 
 [Setup]
 AppId={{6B1C9C2E-4F3A-4E0B-9D8C-3E5A7F0D2B41}
