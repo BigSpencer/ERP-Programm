@@ -6,7 +6,7 @@ import sys
 from PySide6.QtCore import QLibraryInfo, QLocale, QSize, Qt, QTimer, QTranslator
 from PySide6.QtGui import QAction, QFont
 from PySide6.QtWidgets import (
-    QApplication, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QHBoxLayout,
+    QApplication, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QFrame, QHBoxLayout,
     QLabel, QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QMessageBox, QPushButton,
     QSpinBox, QStackedWidget, QVBoxLayout, QWidget,
 )
@@ -21,7 +21,7 @@ from .dealer import (
 from .documents import InvoicesPage, PurchaseOrdersPage, SalesOrdersPage
 from .masterdata import CustomersPage, ProductsPage, SuppliersPage
 from .modules import DashboardPage, admin_module, finance_module, inventory_module
-from .style import STYLESHEET
+from .style import apply_theme, spaced
 from .widgets import FormDialog, Field, run
 
 
@@ -168,6 +168,47 @@ def establish_connection(parent=None, force_dialog=False) -> bool:
 
 
 # --------------------------------------------------------------------------
+# Marke
+# --------------------------------------------------------------------------
+
+def company_name() -> str:
+    try:
+        with db.session_scope() as s:
+            return get_setting(s, "company_name") or APP_NAME
+    except Exception:  # noqa: BLE001 - Anzeige ist optional
+        return APP_NAME
+
+
+def brand_widget(name: str, big: bool = False) -> QWidget:
+    """Schriftzug: erste Wörter in Gold, letztes Wort darunter (z. B. PREMIUM DELUXE / MOTORSPORT)."""
+    words = name.split()
+    top, sub = (" ".join(words[:-1]), words[-1]) if len(words) > 1 else (name, "")
+    w = QWidget()
+    w.setObjectName("brand")
+    lay = QVBoxLayout(w)
+    lay.setContentsMargins(0 if big else 18, 0 if big else 22, 0 if big else 18, 6 if big else 14)
+    lay.setSpacing(3)
+    title = spaced(QLabel(top), 3.5 if big else 2.5)
+    title.setObjectName("brandName")
+    if big:
+        title.setStyleSheet("font-size: 18pt;")
+    lay.addWidget(title)
+    if sub:
+        line = QHBoxLayout()
+        line.setSpacing(8)
+        bar = QFrame()
+        bar.setObjectName("brandLine")
+        bar.setFixedWidth(22)
+        line.addWidget(bar, 0, Qt.AlignmentFlag.AlignVCenter)
+        s = spaced(QLabel(sub), 5.0 if big else 4.0)
+        s.setObjectName("brandSub")
+        line.addWidget(s)
+        line.addStretch(1)
+        lay.addLayout(line)
+    return w
+
+
+# --------------------------------------------------------------------------
 # Anmeldung
 # --------------------------------------------------------------------------
 
@@ -177,10 +218,9 @@ class LoginDialog(QDialog):
         self.setWindowTitle(f"{APP_NAME} – Anmeldung")
         self.user: m.User | None = None
         self.change_connection = False
-        title = QLabel(APP_NAME)
-        title.setObjectName("loginTitle")
+        title = brand_widget(company_name(), big=True)
         cfg, _ = config.load()
-        sub = QLabel(f"Datenbank: {cfg.display()}")
+        sub = QLabel(f"{APP_NAME} · {cfg.display()}")
         sub.setObjectName("hint")
         self.username = QLineEdit()
         self.username.setPlaceholderText("Benutzername")
@@ -199,15 +239,15 @@ class LoginDialog(QDialog):
         row.addStretch(1)
         row.addWidget(login)
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(32, 28, 32, 24)
+        lay.setContentsMargins(36, 32, 36, 28)
         lay.addWidget(title)
         lay.addWidget(sub)
-        lay.addSpacing(12)
+        lay.addSpacing(18)
         lay.addWidget(self.username)
         lay.addWidget(self.password)
         lay.addSpacing(8)
         lay.addLayout(row)
-        self.setMinimumWidth(380)
+        self.setMinimumWidth(420)
 
     def _login(self):
         name, pw = self.username.text(), self.password.text()
@@ -251,12 +291,12 @@ class MainWindow(QMainWindow):
     def __init__(self, user: m.User):
         super().__init__()
         self.user = user
-        company = run(None, lambda s: get_setting(s, "company_name")) or APP_NAME
+        company = company_name()
         self.setWindowTitle(f"{company} – {APP_NAME} {__version__} – {user.full_name or user.username}")
         self.resize(1360, 820)
         self.nav = QListWidget()
         self.nav.setObjectName("nav")
-        self.nav.setFixedWidth(230)
+        self.nav.setFixedWidth(240)
         self.nav.setIconSize(QSize(0, 0))
         self.stack = QStackedWidget()
         self.pages = {}
@@ -271,6 +311,7 @@ class MainWindow(QMainWindow):
                 f = QFont()
                 f.setPointSize(8)
                 f.setBold(True)
+                f.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1.8)
                 header.setFont(f)
                 self.nav.addItem(header)
                 group = grp
@@ -285,7 +326,15 @@ class MainWindow(QMainWindow):
         lay = QHBoxLayout(central)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(0)
-        lay.addWidget(self.nav)
+        sidebar = QWidget()
+        sidebar.setObjectName("sidebar")
+        sidebar.setFixedWidth(240)
+        side = QVBoxLayout(sidebar)
+        side.setContentsMargins(0, 0, 0, 0)
+        side.setSpacing(0)
+        side.addWidget(brand_widget(company))
+        side.addWidget(self.nav, 1)
+        lay.addWidget(sidebar)
         content = QWidget()
         content.setObjectName("content")
         cl = QVBoxLayout(content)
@@ -365,8 +414,7 @@ class MainWindow(QMainWindow):
 def main(argv=None) -> int:
     app = QApplication(argv or sys.argv)
     app.setApplicationName(APP_NAME)
-    app.setStyle("Fusion")
-    app.setStyleSheet(STYLESHEET)
+    apply_theme(app)
     # Deutsche Texte für Standarddialoge (Speichern/Abbrechen, Datumsauswahl …)
     translator = QTranslator(app)
     if translator.load(QLocale(QLocale.Language.German), "qtbase", "_",

@@ -5,7 +5,7 @@ import datetime as dt
 from decimal import Decimal
 
 from PySide6.QtCore import QRectF, Qt
-from PySide6.QtGui import QColor, QPainter, QPen
+from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPen
 from PySide6.QtWidgets import (
     QComboBox, QDialog, QDialogButtonBox, QFormLayout, QFrame, QGridLayout, QHBoxLayout,
     QLabel, QLineEdit, QMessageBox, QPushButton, QTableWidget, QTableWidgetItem, QTabWidget,
@@ -15,6 +15,7 @@ from sqlalchemy import select
 
 from .. import models as m
 from ..services import BusinessError, auth, dec, finance, get_setting, inventory, reports, set_setting
+from . import style
 from .masterdata import AccountsPage, WarehousesPage
 from .widgets import (
     DataTable, DateField, Field, FormDialog, ListPage, SearchCombo, dcell, fmt_money, fmt_qty, num, run,
@@ -331,7 +332,7 @@ class PnLPage(QWidget):
     def refresh(self):
         r = run(self, lambda s: finance.profit_and_loss(s, self.start.value(), self.end.value()))
         if r and r is not True:
-            color = "#1a7f37" if r["result"] >= 0 else "#c62828"
+            color = style.POSITIVE if r["result"] >= 0 else style.NEGATIVE
             self.result.setText(
                 f"<table cellpadding=6 style='font-size:13pt'>"
                 f"<tr><td>Erlöse</td><td align=right>{fmt_money(r['revenue'])} EUR</td></tr>"
@@ -469,8 +470,15 @@ class BarChart(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         w, h = self.width(), self.height()
-        p.setPen(QColor("#6b7280"))
+        p.setPen(QColor(style.GOLD))
+        f = p.font()
+        f.setPointSizeF(8.5)
+        f.setBold(True)
+        f.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1.5)
+        f.setCapitalization(QFont.Capitalization.AllUppercase)
+        p.setFont(f)
         p.drawText(8, 16, self.title)
+        p.setFont(self.font())
         if not self.data:
             return
         top, bottom, left = 30, 26, 10
@@ -481,14 +489,17 @@ class BarChart(QWidget):
         for i, (label, v) in enumerate(self.data):
             x = left + i * slot + (slot - bw) / 2
             bh = (h - top - bottom) * float(v) / maxv
-            p.fillRect(QRectF(x, h - bottom - bh, bw, bh), QColor("#0a6ed1"))
-            p.setPen(QColor("#6b7280"))
+            grad = QLinearGradient(0, h - bottom - bh, 0, h - bottom)
+            grad.setColorAt(0, QColor(style.GOLD_LIGHT))
+            grad.setColorAt(1, QColor(style.GOLD_DARK))
+            p.fillRect(QRectF(x, h - bottom - bh, bw, bh), grad)
+            p.setPen(QColor(style.TEXT_MUTED))
             p.drawText(QRectF(left + i * slot, h - bottom + 4, slot, 18),
                        Qt.AlignmentFlag.AlignHCenter, label)
             if v:
                 p.drawText(QRectF(left + i * slot, h - bottom - bh - 16, slot, 14),
                            Qt.AlignmentFlag.AlignHCenter, f"{float(v) / 1000:.1f}k" if v >= 1000 else f"{float(v):.0f}")
-        p.setPen(QPen(QColor("#d1d5db")))
+        p.setPen(QPen(QColor(style.BORDER_STRONG)))
         p.drawLine(left, h - bottom, w - left, h - bottom)
 
 
