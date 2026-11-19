@@ -216,6 +216,21 @@ details.hist summary { font-weight: 600; min-height: 34px; display: flex; align-
 .sr-defect .spot-sub { color: var(--danger); }
 .spot-quick { flex: none; width: 52px; border-radius: 10px; border: 2px solid var(--st-done-b); background: var(--st-done-f); color: var(--ink); font-size: 20px; font-weight: 700; }
 .spot-quick:disabled { opacity: .35; }
+.tpl { display: grid; gap: 8px; }
+.tpl-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 6px; align-items: center; }
+.tpl-row > input { min-width: 0; padding: 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); font-size: 16px; }
+.tpl-dev { display: grid; justify-items: center; font-size: 11px; color: var(--muted); }
+.tpl-dev input { width: 52px; padding: 6px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); font-size: 16px; text-align: center; }
+.tpl-del { width: 40px; height: 44px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); font-size: 20px; color: var(--muted); }
+.stepper { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--surface); }
+.stepper button { width: 40px; height: 44px; border: 0; background: none; font-size: 20px; color: var(--accent); font-weight: 700; }
+.stepper output { min-width: 28px; text-align: center; font-size: 16px; }
+.room-list { display: grid; gap: 8px; }
+.room-card { display: grid; gap: 8px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); }
+.room-types { display: grid; gap: 6px; }
+.room-type { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.room-type > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.room-card .chip { justify-self: start; }
 .back { justify-self: start; background: none; border: 0; padding: 4px 0; color: var(--accent); font-weight: 600; min-height: 36px; }
 .plan-opt { width: 100%; text-align: left; background: none; border: 0; border-top: 1px solid var(--line); padding: 12px 2px; display: grid; gap: 6px; }
 .plan-opt[aria-current="true"] strong { color: var(--accent); }
@@ -708,28 +723,41 @@ function fitView() {
 function applyVb() { if (vb) svgEl().setAttribute("viewBox", `${vb.x} ${vb.y} ${vb.w} ${vb.h}`); }
 const trunc = (t, n) => (t.length <= n ? t : t.slice(0, Math.max(1, n - 1)) + "…");
 
+/** Unterkante der Raumbeschriftung (relativ zum Raum), so wie renderPlan sie zeichnet. */
+function labelBottomRel(w, h) {
+  const fs = Math.max(.28, Math.min(.75, w / 7, h / 3.6)), fs2 = fs * .78;
+  const lines = Math.min(2, Math.max(0, Math.floor((h - fs - .4) / (fs2 * 1.2))));
+  return .35 + fs + lines * fs2 * 1.25;
+}
+const spotRadius = (w, h) => Math.max(.16, Math.min(.32, Math.min(w, h) / 10));
+/** Raster für n Prüfplätze unterhalb der Beschriftung, relativ zur linken oberen Raumecke. */
+function spotGrid(w, h, n, top = labelBottomRel(w, h)) {
+  if (!n) return [];
+  const r = spotRadius(w, h);
+  const x0 = r + .15, x1 = w - r - .15;
+  const y0 = Math.min(Math.max(top + r, r + .15), h - r - .2), y1 = h - r - .2;
+  const gw = Math.max(.01, x1 - x0), gh = Math.max(.01, y1 - y0);
+  const cols = Math.max(1, Math.min(n, Math.round(Math.sqrt(n * gw / gh)) || 1));
+  const rows = Math.ceil(n / cols);
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    // Mitte gleich großer Felder: gleichmäßig verteilt, mit Abstand zu den Wänden
+    const rx = x0 + ((i % cols) + .5) * gw / cols;
+    const ry = y0 + (Math.floor(i / cols) + .5) * gh / rows;
+    out.push({ rx: Math.round(rx * 100) / 100, ry: Math.round(ry * 100) / 100 });
+  }
+  return out;
+}
 /** Lage der Prüfplätze: gespeicherte Position, sonst automatisch im Raster unterhalb der Beschriftung. */
 function spotPositions(a, textBottom) {
   const spots = a.spots || []; if (!spots.length) return [];
-  const r = Math.max(.16, Math.min(.32, Math.min(a.w, a.h) / 10));
-  const x0 = a.x + r + .15, x1 = a.x + a.w - r - .15;
-  const y0 = Math.min(Math.max(textBottom + r, a.y + r + .15), a.y + a.h - r - .2), y1 = a.y + a.h - r - .2;
-  const auto = spots.filter((s) => s.rx == null || s.ry == null);
-  const w = Math.max(.01, x1 - x0), h = Math.max(.01, y1 - y0);
-  const cols = Math.max(1, Math.min(auto.length, Math.round(Math.sqrt(auto.length * w / h)) || 1));
-  const rows = Math.ceil(auto.length / cols);
-  const out = [];
+  const r = spotRadius(a.w, a.h);
+  const grid = spotGrid(a.w, a.h, spots.filter((s) => s.rx == null || s.ry == null).length, textBottom - a.y);
   let i = 0;
-  for (const s of spots) {
-    if (s.rx != null && s.ry != null) {   // relativ zur linken oberen Raumecke gespeichert
-      out.push([s, { x: a.x + Math.min(Math.max(s.rx, r), a.w - r), y: a.y + Math.min(Math.max(s.ry, r), a.h - r), r }]);
-    } else {
-      const cx = cols === 1 ? (x0 + x1) / 2 : x0 + (i % cols) * w / (cols - 1);
-      const cy = rows === 1 ? (y0 + y1) / 2 : y0 + Math.floor(i / cols) * h / (rows - 1);
-      out.push([s, { x: cx, y: cy, r }]); i++;
-    }
-  }
-  return out;
+  return spots.map((s) => {
+    const pos = s.rx != null && s.ry != null ? s : grid[i++];   // relativ zur linken oberen Raumecke
+    return [s, { x: a.x + Math.min(Math.max(pos.rx, r), a.w - r), y: a.y + Math.min(Math.max(pos.ry, r), a.h - r), r }];
+  });
 }
 
 function renderPlan(fit) {
@@ -1238,56 +1266,164 @@ function confirmDeletePlan(plan) {
       } }, "Endgültig löschen"))));
 }
 
+// ---------- Prüfplatz-Vorlage (für neue Räume und Raumreihen) ----------
+const DEFAULT_TPL = [{ name: "Arbeitsplatz", count: 2, devices: 3 }];
+const loadTpl = () => { const t = ls("tpl"); return Array.isArray(t) ? t.filter((x) => x && x.name) : DEFAULT_TPL.map((x) => ({ ...x })); };
+const tplTotal = (entries) => entries.reduce((n, e) => n + (e.count || 0), 0);
+/** Erzeugt die Prüfplätze eines Raums aus Einträgen {name, count, devices} – gleich mit fester Position. */
+function buildSpots(entries, w, h) {
+  const list = [];
+  for (const e of entries) for (let i = 1; i <= (e.count || 0); i++)
+    list.push({ id: newId("s"), name: e.count > 1 ? `${e.name} ${i}` : e.name, devices: e.devices || 0, status: "open", note: "", by: null, at: null });
+  spotGrid(w, h, list.length).forEach((pos, i) => Object.assign(list[i], pos));
+  return list;
+}
+function stepper(value, min, max, onChange, label) {
+  const out = el("output", { class: "mono", "aria-live": "polite" }, String(value));
+  const set = (v) => { value = Math.min(max, Math.max(min, v)); out.textContent = String(value); onChange(value); };
+  return el("span", { class: "stepper", role: "group", "aria-label": label },
+    el("button", { type: "button", "aria-label": `${label} verringern`, onclick: () => set(value - 1) }, "−"), out,
+    el("button", { type: "button", "aria-label": `${label} erhöhen`, onclick: () => set(value + 1) }, "+"));
+}
+/** Editor für die Prüfplätze, die jeder neue Raum bekommt. entries wird direkt verändert. */
+function tplEditor(entries, onChange = () => {}) {
+  const box = el("div", { class: "tpl" });
+  const draw = () => {
+    box.replaceChildren();
+    entries.forEach((e, idx) => {
+      const name = el("input", { id: `tpl-n-${idx}`, value: e.name, "aria-label": "Bezeichnung", autocomplete: "off" });
+      name.addEventListener("input", () => { e.name = name.value; onChange(); });
+      const dev = el("input", { id: `tpl-d-${idx}`, type: "number", inputmode: "numeric", min: 0, value: e.devices ?? 0, "aria-label": "Geräte je Platz" });
+      dev.addEventListener("input", () => { e.devices = Math.max(0, Math.round(Number(dev.value) || 0)); onChange(); });
+      box.append(el("div", { class: "tpl-row" }, name,
+        stepper(e.count, 0, 50, (v) => { e.count = v; onChange(); }, `Anzahl ${e.name || "Prüfplatz"}`),
+        el("label", { class: "tpl-dev" }, dev, el("span", {}, "Geräte")),
+        el("button", { type: "button", class: "tpl-del", "aria-label": `${e.name || "Eintrag"} entfernen`, onclick: () => { entries.splice(idx, 1); draw(); onChange(); } }, "×")));
+    });
+    if (!entries.length) box.append(el("p", { class: "muted", style: { margin: 0, fontSize: "14px" } }, "Keine Prüfplätze – Räume werden leer angelegt."));
+    box.append(el("div", { class: "quick" }, SPOT_NAMES.map((n) => el("button", { type: "button", class: "chip",
+      onclick: () => { const ex = entries.find((x) => x.name === n); if (ex) ex.count = Math.min(50, ex.count + 1); else entries.push({ name: n, count: 1, devices: n === "Arbeitsplatz" ? 3 : 1 }); draw(); onChange(); } }, `＋ ${n}`))));
+  };
+  draw();
+  return box;
+}
+const cleanTpl = (entries) => entries.map((e) => ({ name: (e.name || "").trim(), count: Math.max(0, Math.min(50, e.count || 0)), devices: Math.max(0, e.devices || 0) }))
+  .filter((e) => e.name && e.count > 0);
+
 function newRoomSheet(rect) {
   const p = curPlan();
   const err = el("p", { class: "err", role: "alert" });
   const input = el("input", { id: "nr-name", value: `Raum ${planAreas().length + 1}`, enterkeyhint: "done" });
-  const save = async () => {
+  const tpl = loadTpl();
+  const info = el("span", { class: "muted mono" });
+  const upd = () => { info.textContent = `${tplTotal(cleanTpl(tpl))} Plätze`; };
+  const save = async (ev) => {
     const name = input.value.trim(); if (!name) { err.textContent = "Bitte eine Bezeichnung eingeben."; return; }
+    const entries = cleanTpl(tpl);
+    if (tplTotal(entries) > 200) { err.textContent = "Höchstens 200 Prüfplätze je Raum."; return; }
     const g = clampGeom(p, rect.x, rect.y, rect.w, rect.h);
-    if (await writeArea(newId("a"), newArea(p.id, name, g.x, g.y, g.w, g.h))) { closeSheet(); toast(`„${name}“ angelegt`); }
+    if (ev?.target) ev.target.disabled = true;
+    ls("tpl", entries);
+    const spots = buildSpots(entries, g.w, g.h);
+    if (await writeArea(newId("a"), { ...newArea(p.id, name, g.x, g.y, g.w, g.h), spots })) {
+      closeSheet(); toast(spots.length ? `„${name}“ mit ${spots.length} Prüfplätzen angelegt` : `„${name}“ angelegt`);
+    } else if (ev?.target) ev.target.disabled = false;
   };
-  input.addEventListener("keydown", (e) => { if (e.key === "Enter") save(); });
   openSheet("new-room", el("div", { style: { display: "grid", gap: "12px" } },
     el("h2", { id: "sheet-title" }, "Neuer Prüfbereich"),
     el("p", { class: "sub mono" }, `${fmtM(rect.w)} × ${fmtM(rect.h)} m`),
-    el("div", { class: "field" }, el("label", { for: "nr-name" }, "Bezeichnung"), input), err,
+    el("div", { class: "field" }, el("label", { for: "nr-name" }, "Bezeichnung"), input),
+    el("div", { class: "field" }, el("div", { class: "spots-head" }, el("span", { class: "lbl" }, "Prüfplätze in diesem Raum"), info), tplEditor(tpl, upd)),
+    err,
     el("div", { class: "btn-row" }, el("button", { type: "button", class: "btn", onclick: closeSheet }, "Abbrechen"),
-      el("button", { type: "button", class: "btn primary", onclick: save }, "Anlegen"))));
+      el("button", { type: "button", class: "btn primary", onclick: save }, "Anlegen"))), { busy: true });
+  upd();
   setTimeout(() => { input.focus(); input.select(); }, 60);
 }
 
 function rowSheet() {
   const p = curPlan(); if (!p) return;
+  const R = { prefix: "Büro 1.", start: 1, n: 6, dir: "h", x: 0, y: 0, w: 6, h: 5, tpl: loadTpl(), rooms: null };
+  rowStep1(p, R);
+}
+function rowStep1(p, R) {
   const err = el("p", { class: "err", role: "alert" });
+  const info = el("span", { class: "muted mono" });
+  const upd = () => { const c = tplTotal(cleanTpl(R.tpl)); info.textContent = `${c} je Raum`; };
   openSheet("row", el("div", { style: { display: "grid", gap: "12px" } },
     el("h2", { id: "sheet-title" }, "Raumreihe anlegen"),
-    el("p", { class: "sub" }, "Mehrere gleich große Räume auf einmal, z. B. Büros entlang eines Flurs."),
+    el("p", { class: "sub" }, "Schritt 1 von 2 · Räume und Prüfplätze"),
     el("div", { class: "grid2" },
-      el("div", { class: "field" }, el("label", { for: "rw-prefix" }, "Präfix"), el("input", { id: "rw-prefix", value: "Büro 1." })),
-      numField("rw-start", "Erste Nummer", 1, 1, 0)),
-    el("div", { class: "grid2" }, numField("rw-count", "Anzahl", 6, 1, 1),
+      el("div", { class: "field" }, el("label", { for: "rw-prefix" }, "Präfix"), el("input", { id: "rw-prefix", value: R.prefix })),
+      numField("rw-start", "Erste Nummer", R.start, 1, 0)),
+    el("div", { class: "grid2" }, numField("rw-count", "Anzahl Räume", R.n, 1, 1),
       el("div", { class: "field" }, el("label", { for: "rw-dir" }, "Anordnung"),
-        el("select", { id: "rw-dir" }, el("option", { value: "h" }, "nebeneinander →"), el("option", { value: "v" }, "untereinander ↓")))),
-    el("div", { class: "grid2" }, numField("rw-x", "Start links (m)", 0), numField("rw-y", "Start oben (m)", 0)),
-    el("div", { class: "grid2" }, numField("rw-w", "Breite je Raum (m)", 6, .5, .5), numField("rw-h", "Tiefe je Raum (m)", 5, .5, .5)),
+        el("select", { id: "rw-dir" }, el("option", { value: "h", selected: R.dir === "h" }, "nebeneinander →"), el("option", { value: "v", selected: R.dir === "v" }, "untereinander ↓")))),
+    el("div", { class: "grid2" }, numField("rw-x", "Start links (m)", R.x), numField("rw-y", "Start oben (m)", R.y)),
+    el("div", { class: "grid2" }, numField("rw-w", "Breite je Raum (m)", R.w, .5, .5), numField("rw-h", "Tiefe je Raum (m)", R.h, .5, .5)),
     el("p", { class: "muted", style: { margin: 0, fontSize: "14px" } }, `Grundriss: ${fmtM(p.w)} × ${fmtM(p.h)} m. Beispiel: Präfix „Büro 1.“, Nummer 1, Anzahl 6 → Büro 1.1 bis Büro 1.6.`),
+    el("div", { class: "field" }, el("div", { class: "spots-head" }, el("span", { class: "lbl" }, "Prüfplätze in jedem Raum"), info), tplEditor(R.tpl, upd)),
     err,
     el("div", { class: "btn-row" }, el("button", { type: "button", class: "btn", onclick: closeSheet }, "Abbrechen"),
-      el("button", { type: "button", class: "btn primary", onclick: async (ev) => {
-        const pre = $("#rw-prefix").value, start = Math.round(num("rw-start")), n = Math.round(num("rw-count"));
-        const horiz = $("#rw-dir").value === "h", x = snap(num("rw-x")), y = snap(num("rw-y")), w = snap(num("rw-w")), h = snap(num("rw-h"));
-        if (!(n >= 1 && n <= 60)) { err.textContent = "Anzahl zwischen 1 und 60 angeben."; return; }
-        if (!(w >= MIN && h >= MIN)) { err.textContent = "Breite und Tiefe mindestens 0,5 m."; return; }
-        const ex = horiz ? x + w * n : x + w, ey = horiz ? y + h : y + h * n;
+      el("button", { type: "button", class: "btn primary", onclick: () => {
+        const v = { prefix: $("#rw-prefix").value, start: Math.round(num("rw-start")), n: Math.round(num("rw-count")), dir: $("#rw-dir").value,
+          x: snap(num("rw-x")), y: snap(num("rw-y")), w: snap(num("rw-w")), h: snap(num("rw-h")) };
+        if (!(v.n >= 1 && v.n <= 60)) { err.textContent = "Anzahl zwischen 1 und 60 angeben."; return; }
+        if (!(v.w >= MIN && v.h >= MIN)) { err.textContent = "Breite und Tiefe mindestens 0,5 m."; return; }
+        const ex = v.dir === "h" ? v.x + v.w * v.n : v.x + v.w, ey = v.dir === "h" ? v.y + v.h : v.y + v.h * v.n;
         if (ex > p.w + 1e-6 || ey > p.h + 1e-6) { err.textContent = `Passt nicht auf den Grundriss (bis ${fmtM(ex)} × ${fmtM(ey)} m nötig).`; return; }
+        if (R.tpl.some((e) => e.count > 0 && !(e.name || "").trim())) { err.textContent = "Bitte jedem Prüfplatz eine Bezeichnung geben."; return; }
+        const tpl = cleanTpl(R.tpl);
+        // Abfrage je Raum: bisherige Anpassungen behalten, wenn Räume und Vorlage gleich geblieben sind
+        const names = Array.from({ length: v.n }, (_, i) => `${v.prefix}${v.start + i}`);
+        const key = JSON.stringify(tpl.map((e) => [e.name, e.count]));
+        if (!R.rooms || R.rooms.length !== v.n || R.tplKey !== key) R.rooms = names.map(() => tpl.map((e) => e.count));
+        Object.assign(R, v, { names, tplClean: tpl, tplKey: key });
+        rowStep2(p, R);
+      } }, "Weiter"))), { busy: true, id: "row-step1" });
+  upd();
+}
+function rowStep2(p, R) {
+  const err = el("p", { class: "err", role: "alert" });
+  const total = el("strong", { class: "mono" });
+  const updTotal = () => { const n = R.rooms.reduce((s, r) => s + r.reduce((a, b) => a + b, 0), 0); total.textContent = `${R.n} Räume · ${n} Prüfplätze`; };
+  const list = el("div", { class: "room-list" });
+  const draw = () => {
+    list.replaceChildren();
+    R.names.forEach((name, ri) => {
+      const counts = R.rooms[ri];
+      const sum = el("span", { class: "muted mono" });
+      const updSum = () => { sum.textContent = `${counts.reduce((a, b) => a + b, 0)} Plätze`; };
+      list.append(el("div", { class: "room-card" },
+        el("div", { class: "spots-head" }, el("strong", {}, name), sum),
+        R.tplClean.length ? el("div", { class: "room-types" }, R.tplClean.map((e, ti) => el("div", { class: "room-type" },
+          el("span", {}, e.name), stepper(counts[ti], 0, 50, (v) => { counts[ti] = v; updSum(); updTotal(); }, `${e.name} in ${name}`))))
+          : el("p", { class: "muted", style: { margin: 0, fontSize: "14px" } }, "keine Prüfplätze"),
+        R.n > 1 && ri === 0 ? el("button", { type: "button", class: "chip", onclick: () => { for (const r of R.rooms) r.splice(0, r.length, ...counts); draw(); updTotal(); } }, "Für alle Räume übernehmen") : null));
+      updSum();
+    });
+  };
+  draw(); updTotal();
+  openSheet("row", el("div", { style: { display: "grid", gap: "12px" } },
+    el("button", { type: "button", class: "back", onclick: () => rowStep1(p, R) }, "‹ Räume und Vorlage"),
+    el("h2", { id: "sheet-title" }, "Prüfplätze je Raum"),
+    el("p", { class: "sub" }, "Schritt 2 von 2 · Anzahl für jeden Raum prüfen und bei Bedarf anpassen. Die Plätze werden beim Anlegen gleich im Raum platziert."),
+    total, list, err,
+    el("div", { class: "btn-row" }, el("button", { type: "button", class: "btn", onclick: () => rowStep1(p, R) }, "Zurück"),
+      el("button", { type: "button", class: "btn primary", onclick: async (ev) => {
+        if (R.rooms.some((r) => r.reduce((a, b) => a + b, 0) > 200)) { err.textContent = "Höchstens 200 Prüfplätze je Raum."; return; }
         ev.target.disabled = true;
-        for (let i = 0; i < n; i++) {
-          const ok = await writeArea(newId("a"), newArea(p.id, `${pre}${start + i}`, horiz ? x + i * w : x, horiz ? y : y + i * h, w, h));
-          if (!ok) { ev.target.disabled = false; return; }
+        ls("tpl", R.tplClean);
+        let spotsTotal = 0;
+        for (let i = 0; i < R.n; i++) {
+          const entries = R.tplClean.map((e, ti) => ({ ...e, count: R.rooms[i][ti] }));
+          const spots = buildSpots(entries, R.w, R.h); spotsTotal += spots.length;
+          const ax = R.dir === "h" ? R.x + i * R.w : R.x, ay = R.dir === "h" ? R.y : R.y + i * R.h;
+          const ok = await writeArea(newId("a"), { ...newArea(p.id, R.names[i], ax, ay, R.w, R.h), spots });
+          if (!ok) { ev.target.disabled = false; err.textContent = `Abgebrochen bei ${R.names[i]} – die Räume davor sind angelegt.`; return; }
         }
-        closeSheet(); toast(`${n} Räume angelegt`);
-      } }, "Anlegen"))));
+        closeSheet(); toast(`${R.n} Räume mit ${spotsTotal} Prüfplätzen angelegt`);
+      } }, "Anlegen"))), { busy: true, id: "row-step2" });
 }
 
 function editAreaSheet(id) {
