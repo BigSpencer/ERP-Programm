@@ -1,0 +1,1109 @@
+<title>Prüfplanung DGUV V3</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: eine Bildschirmhöhe – Kopfzeile, Inhalt (Grundriss oder Liste), Tab-Leiste; Details im Bottom-Sheet */
+:root {
+  --bg: #eef1f4;
+  --surface: #ffffff;
+  --ink: #17283a;
+  --muted: #5f6e7d;
+  --line: #d7dde4;
+  --accent: #0b63c5;
+  --accent-ink: #ffffff;
+  --bar: #17283a;
+  --bar-ink: #f2f5f8;
+  --plan: #ffffff;
+  --plan-grid: #e4e8ed;
+  --plan-bg: #e2e7ec;
+  --danger: #c4271c;
+  --warn-bg: #fff2c4;
+  --warn-ink: #5c4500;
+  --st-open-f: #eef1f4;      --st-open-b: #8593a1;
+  --st-partial-f: #fff0bf;   --st-partial-b: #c99400;
+  --st-appointment-f: #d8e9ff; --st-appointment-b: #0b63c5;
+  --st-clarify-f: #ffdcd8;   --st-clarify-b: #c4271c;
+  --st-done-f: #d5f1dd;      --st-done-b: #1d8a3b;
+  --f-body: "IBM Plex Sans", -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --f-label: "IBM Plex Sans Condensed", "Arial Narrow", "IBM Plex Sans", sans-serif;
+  --f-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --tab-h: 60px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1822; --surface: #182431; --ink: #e8eef4; --muted: #9aa9b8; --line: #2b3a4a;
+    --accent: #4d9cf0; --accent-ink: #08131f; --bar: #0a121b; --bar-ink: #e8eef4;
+    --plan: #1b2836; --plan-grid: #243344; --plan-bg: #111b25; --danger: #ff6b5e;
+    --warn-bg: #3d3210; --warn-ink: #ffe08a;
+    --st-open-f: #223141;      --st-open-b: #7f90a2;
+    --st-partial-f: #3d3210;   --st-partial-b: #e0b225;
+    --st-appointment-f: #13314f; --st-appointment-b: #4d9cf0;
+    --st-clarify-f: #44201d;   --st-clarify-b: #ff6b5e;
+    --st-done-f: #163824;      --st-done-b: #4cc26c;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1822; --surface: #182431; --ink: #e8eef4; --muted: #9aa9b8; --line: #2b3a4a;
+  --accent: #4d9cf0; --accent-ink: #08131f; --bar: #0a121b; --bar-ink: #e8eef4;
+  --plan: #1b2836; --plan-grid: #243344; --plan-bg: #111b25; --danger: #ff6b5e;
+  --warn-bg: #3d3210; --warn-ink: #ffe08a;
+  --st-open-f: #223141;      --st-open-b: #7f90a2;
+  --st-partial-f: #3d3210;   --st-partial-b: #e0b225;
+  --st-appointment-f: #13314f; --st-appointment-b: #4d9cf0;
+  --st-clarify-f: #44201d;   --st-clarify-b: #ff6b5e;
+  --st-done-f: #163824;      --st-done-b: #4cc26c;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.4 var(--f-body); overscroll-behavior: none; }
+button, input, textarea, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.muted { color: var(--muted); }
+.mono { font-family: var(--f-data); font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+#app { height: 100%; display: flex; flex-direction: column; }
+.topbar { display: flex; align-items: center; gap: 10px; padding: 8px 16px; background: var(--bar); color: var(--bar-ink); }
+.plan-picker { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; min-height: 44px; border: 0;
+  border-radius: 10px; padding: 6px 12px; background: color-mix(in srgb, var(--bar-ink) 9%, transparent); color: var(--bar-ink);
+  font-weight: 600; font-size: 17px; text-align: left; }
+.plan-picker span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.who { display: flex; align-items: center; gap: 6px; font-size: 12px; color: color-mix(in srgb, var(--bar-ink) 75%, transparent); }
+.who img { width: 28px; height: 28px; border-radius: 50%; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: #45c46d; flex: none; }
+.dot.off { background: #e9a400; }
+.banner { padding: 8px 16px; background: var(--warn-bg); color: var(--warn-ink); font-size: 14px; border-bottom: 1px solid var(--line); }
+
+main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.view { flex: 1; min-height: 0; overflow: auto; -webkit-overflow-scrolling: touch; }
+#view-plan { display: flex; flex-direction: column; overflow: hidden; }
+
+.summary { padding: 10px 16px; background: var(--surface); border-bottom: 1px solid var(--line); display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.sum-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 14px; }
+.sum-row strong { font-size: 20px; }
+.bar { height: 8px; border-radius: 4px; background: var(--st-open-f); overflow: hidden; }
+.bar > span { display: block; height: 100%; background: var(--st-done-b); transition: width .3s; }
+.counts { min-width: 0; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.count { flex: none; font-size: 12px; padding: 3px 9px; border-radius: 999px; border: 1.5px solid; font-family: var(--f-label); letter-spacing: .02em; }
+
+.stage { position: relative; flex: 1; min-height: 0; background: var(--plan-bg); }
+#plan-svg { width: 100%; height: 100%; display: block; touch-action: none; user-select: none; -webkit-user-select: none; }
+.p-surface { fill: var(--plan); }
+.p-grid { stroke: var(--plan-grid); stroke-width: .02; }
+.p-wall { fill: none; stroke: var(--ink); stroke-width: .08; }
+.area .box { stroke-width: .08; }
+.area .t1 { fill: var(--ink); font-family: var(--f-body); font-weight: 700; pointer-events: none; }
+.area .t2 { fill: var(--muted); font-family: var(--f-body); pointer-events: none; }
+.area.dim { opacity: .3; }
+.area.overdue .box { stroke: var(--danger); stroke-width: .14; stroke-dasharray: .35 .2; }
+.area.sel .box { stroke: var(--ink); stroke-width: .2; }
+.area.moving { opacity: .75; }
+.rubber { fill: color-mix(in srgb, var(--accent) 18%, transparent); stroke: var(--accent); stroke-width: .08; stroke-dasharray: .3 .15; }
+.rubber-label { fill: var(--accent); font-family: var(--f-data); }
+.f-open { fill: var(--st-open-f); stroke: var(--st-open-b); } .k-open { fill: var(--st-open-b); }
+.f-partial { fill: var(--st-partial-f); stroke: var(--st-partial-b); } .k-partial { fill: var(--st-partial-b); }
+.f-appointment { fill: var(--st-appointment-f); stroke: var(--st-appointment-b); } .k-appointment { fill: var(--st-appointment-b); }
+.f-clarify { fill: var(--st-clarify-f); stroke: var(--st-clarify-b); } .k-clarify { fill: var(--st-clarify-b); }
+.f-done { fill: var(--st-done-f); stroke: var(--st-done-b); } .k-done { fill: var(--st-done-b); }
+
+.floating { position: absolute; display: flex; gap: 8px; }
+.tl { left: 12px; top: 10px; flex-wrap: wrap; right: 12px; }
+.br { right: 12px; bottom: 12px; flex-direction: column; }
+.pill { min-height: 40px; padding: 8px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface);
+  color: var(--ink); font-size: 14px; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 8px rgba(0,0,0,.14); }
+.pill input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); }
+.pill.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.round { width: 46px; height: 46px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); font-size: 22px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.15); color: var(--ink); }
+.edit-hint { position: absolute; left: 12px; right: 70px; bottom: 12px; font-size: 13px; padding: 8px 12px; border-radius: 10px;
+  background: var(--surface); color: var(--muted); border: 1px solid var(--line); }
+.empty-state { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; gap: 12px; padding: 24px 16px; color: var(--muted); }
+.empty-state h2 { margin: 0; color: var(--ink); font-size: 20px; }
+
+.list-head { padding: 10px 16px; background: var(--surface); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 2; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.list-head input[type=search] { width: 100%; padding: 11px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); font-size: 16px; }
+.chips { min-width: 0; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.chip { flex: none; min-height: 36px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); font-size: 14px; }
+.chip.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.switch { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
+.switch input { width: 20px; height: 20px; margin: 0; accent-color: var(--accent); }
+.cards { list-style: none; margin: 0 auto; padding: 10px 16px 20px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; max-width: 720px; }
+.card { display: flex; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; min-height: 64px; text-align: left; width: 100%; padding: 0; }
+.card .stripe { width: 6px; flex: none; }
+.card .ci { flex: 1; min-width: 0; padding: 10px 12px; display: grid; gap: 2px; }
+.card .t { font-weight: 600; display: flex; justify-content: space-between; gap: 8px; }
+.card .t span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card .s { font-size: 14px; color: var(--muted); }
+.card .n { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card.overdue .s { color: var(--danger); font-weight: 600; }
+.group-h { font-family: var(--f-label); font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 8px 2px 0; }
+.note-empty { text-align: center; color: var(--muted); padding: 24px 0; }
+.more { padding: 16px; max-width: 640px; margin: 0 auto; display: grid; gap: 14px; }
+.more h3 { margin: 6px 0 0; font-family: var(--f-label); text-transform: uppercase; letter-spacing: .06em; font-size: 13px; color: var(--muted); }
+.more ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+
+.tabbar { display: flex; height: var(--tab-h); background: var(--surface); border-top: 1px solid var(--line); }
+.tabbar button { flex: 1; border: 0; background: none; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 2px; font-size: 12px; color: var(--muted); position: relative; }
+.tabbar .ti { font-size: 21px; line-height: 1; }
+.tabbar button[aria-current="page"] { color: var(--accent); font-weight: 600; }
+.badge { position: absolute; top: 6px; left: calc(50% + 8px); min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
+  background: var(--accent); color: var(--accent-ink); font-size: 11px; line-height: 18px; font-weight: 700; }
+.badge.warn { background: var(--danger); color: #fff; }
+
+.btn { min-height: 48px; padding: 10px 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); font-weight: 600;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.btn:disabled { opacity: .45; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 50%, var(--line)); }
+.btn.block { width: 100%; }
+
+.backdrop { position: fixed; inset: 0; background: rgba(8,15,22,.5); z-index: 20; }
+.sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 21; max-height: 88%; overflow: auto; margin: 0 auto; max-width: 640px;
+  background: var(--surface); border-radius: 20px 20px 0 0; padding: 6px 16px calc(18px + env(safe-area-inset-bottom, 0px));
+  box-shadow: 0 -10px 30px rgba(0,0,0,.25); animation: up .16s ease-out; display: grid; gap: 10px; }
+@keyframes up { from { transform: translateY(30px); } to { transform: none; } }
+.grabber { width: 40px; height: 5px; border-radius: 3px; background: var(--line); margin: 4px auto 2px; }
+.sheet h2 { margin: 0; font-size: 22px; text-wrap: balance; }
+.sheet .sub { margin: -6px 0 0; font-size: 14px; color: var(--muted); }
+.st-pill { justify-self: start; padding: 4px 12px; border-radius: 999px; border: 2px solid; font-weight: 600; font-size: 14px; }
+.facts { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 15px; }
+.facts dt { color: var(--muted); }
+.facts dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.actions .wide { grid-column: 1 / -1; min-height: 62px; font-size: 18px; }
+.act { min-height: 54px; border-radius: 14px; border: 2px solid; font-weight: 600; font-size: 16px; color: var(--ink); }
+.act:disabled { opacity: .4; }
+.notice { background: var(--warn-bg); color: var(--warn-ink); border-radius: 10px; padding: 10px 12px; font-size: 14px; }
+.field { display: grid; gap: 4px; }
+.field > label, .field > .lbl { font-size: 14px; color: var(--muted); }
+.field input, .field textarea, .field select { width: 100%; padding: 11px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); font-size: 16px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.quick { display: flex; flex-wrap: wrap; gap: 6px; }
+.range-row { display: flex; align-items: center; gap: 12px; }
+.range-row input { flex: 1; accent-color: var(--st-partial-b); height: 34px; }
+.range-row output { font-family: var(--f-data); font-size: 20px; min-width: 60px; text-align: right; }
+.btn-row { display: flex; gap: 10px; }
+.btn-row .btn { flex: 1; }
+.err { color: var(--danger); font-size: 14px; min-height: 1.2em; margin: 0; }
+details.hist summary { font-weight: 600; min-height: 34px; display: flex; align-items: center; }
+.hist-item { font-size: 14px; padding: 8px 0; border-top: 1px solid var(--line); display: grid; gap: 2px; }
+.plan-opt { width: 100%; text-align: left; background: none; border: 0; border-top: 1px solid var(--line); padding: 12px 2px; display: grid; gap: 6px; }
+.plan-opt[aria-current="true"] strong { color: var(--accent); }
+.people { display: grid; gap: 4px; }
+.person { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); text-align: left; width: 100%; }
+.person img { width: 30px; height: 30px; border-radius: 50%; }
+.toast { position: fixed; left: 16px; right: 16px; bottom: calc(var(--tab-h) + 14px + env(safe-area-inset-bottom, 0px)); z-index: 30; max-width: 560px; margin: 0 auto;
+  background: var(--ink); color: var(--bg); border-radius: 12px; padding: 12px 14px; display: flex; align-items: center; gap: 12px; box-shadow: 0 6px 20px rgba(0,0,0,.3); }
+.toast span { flex: 1; }
+.toast button { background: none; border: 0; color: inherit; font-weight: 700; text-decoration: underline; min-height: 40px; }
+</style>
+
+<div id="app">
+  <header class="topbar">
+    <button class="plan-picker" id="plan-picker" type="button" aria-haspopup="dialog">
+      <span id="plan-title">Grundrisse werden geladen …</span><span aria-hidden="true">▾</span>
+    </button>
+    <span class="who"><span class="dot" id="conn-dot" title="Verbindung"></span><img id="me-avatar" alt="" hidden></span>
+  </header>
+  <div class="banner" id="banner" hidden></div>
+
+  <main>
+    <section class="view" id="view-plan" aria-label="Grundriss">
+      <div class="summary" id="summary" hidden></div>
+      <div class="stage">
+        <svg id="plan-svg" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Grundriss mit Prüfbereichen"></svg>
+        <div class="floating tl" id="plan-top" hidden>
+          <label class="pill" for="only-mine"><input type="checkbox" id="only-mine"> nur meine</label>
+          <button class="pill" id="edit-toggle" type="button" hidden>✎ Bearbeiten</button>
+          <button class="pill" id="row-btn" type="button" hidden>＋ Raumreihe</button>
+        </div>
+        <div class="floating br" id="zoom-tools" hidden>
+          <button class="round" id="zoom-in" type="button" aria-label="Vergrößern">+</button>
+          <button class="round" id="zoom-out" type="button" aria-label="Verkleinern">−</button>
+          <button class="round" id="zoom-fit" type="button" aria-label="Grundriss einpassen">⤢</button>
+        </div>
+        <p class="edit-hint" id="edit-hint" hidden>Mit einem Finger ein Rechteck ziehen = neuer Raum. Raum ziehen = verschieben, antippen = bearbeiten. Zwei Finger = zoomen.</p>
+        <div class="empty-state" id="plan-empty">
+          <h2>Grundrisse werden geladen …</h2>
+          <p>Gleich erscheinen hier die Räume der Abteilung, farbig nach Prüfstand.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="view" id="view-list" aria-label="Meine Bereiche" hidden>
+      <div class="list-head">
+        <input type="search" id="search" placeholder="Raum suchen …" autocomplete="off">
+        <div class="chips" id="status-chips" role="group" aria-label="Nach Status filtern"></div>
+        <label class="switch" for="list-all"><input type="checkbox" id="list-all"> auch Bereiche anderer Prüfer und freie Bereiche</label>
+      </div>
+      <ul class="cards" id="area-list"></ul>
+    </section>
+
+    <section class="view" id="view-dates" aria-label="Termine" hidden>
+      <div class="list-head"><label class="switch" for="dates-all"><input type="checkbox" id="dates-all"> Termine aller Prüfer</label></div>
+      <ul class="cards" id="date-list"></ul>
+    </section>
+
+    <section class="view" id="view-more" aria-label="Mehr" hidden>
+      <div class="more">
+        <div><strong id="me-name">Prüfer</strong><br><span class="muted" id="me-role"></span></div>
+        <button class="btn block" id="new-plan-btn" type="button">Neuen Grundriss anlegen</button>
+        <h3>So funktioniert es</h3>
+        <ul>
+          <li>Raum antippen und Status setzen: <b>Erledigt</b>, <b>Teilweise</b> (mit Fortschritt), <b>Termin</b> (mit Datum) oder <b>In Klärung</b> (mit Grund).</li>
+          <li>Jeder Bereich gehört einem Prüfer. Freie Bereiche übernimmt, wer sie zuerst markiert. Bereiche anderer Prüfer sind gesperrt.</li>
+          <li>Alle mit diesem Link sehen denselben Stand – Änderungen erscheinen bei den Kollegen sofort.</li>
+          <li>Ohne Empfang (Keller, Technikraum) werden Änderungen vorgemerkt und übertragen, sobald wieder Verbindung besteht.</li>
+          <li>Vorbereitung: Unter „Grundriss“ auf <b>✎ Bearbeiten</b> tippen. Räume mit dem Finger aufziehen oder per <b>Raumreihe</b> viele gleiche Büros auf einmal anlegen. Alles rastet im 0,5-m-Raster ein.</li>
+        </ul>
+        <p class="muted" style="font-size:13px;margin:0">Dient der Organisation der Prüfung nach DGUV Vorschrift 3. Messwerte und Prüfprotokolle der einzelnen Geräte bleiben im Prüfgerät bzw. der Prüfsoftware.</p>
+      </div>
+    </section>
+  </main>
+
+  <nav class="tabbar" aria-label="Ansichten">
+    <button type="button" data-view="plan" aria-current="page"><span class="ti" aria-hidden="true">▦</span>Grundriss</button>
+    <button type="button" data-view="list"><span class="ti" aria-hidden="true">☰</span>Meine<span class="badge" id="badge-mine" hidden></span></button>
+    <button type="button" data-view="dates"><span class="ti" aria-hidden="true">◷</span>Termine<span class="badge warn" id="badge-dates" hidden></span></button>
+    <button type="button" data-view="more"><span class="ti" aria-hidden="true">⋯</span>Mehr</button>
+  </nav>
+</div>
+
+<div class="backdrop" id="backdrop" hidden></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" hidden></div>
+<div class="toast" id="toast" role="status" hidden><span id="toast-text"></span><button type="button" id="toast-btn" hidden></button></div>
+
+<script>
+"use strict";
+// ======================================================================
+// Grundlagen
+// ======================================================================
+const STATUS = {
+  open: { label: "Offen", icon: "○" },
+  partial: { label: "Teilweise erledigt", icon: "◑" },
+  appointment: { label: "Termin", icon: "◷" },
+  clarify: { label: "In Klärung", icon: "?" },
+  done: { label: "Erledigt", icon: "✔" },
+};
+const ORDER = ["open", "partial", "clarify", "appointment", "done"];
+const CLARIFY_QUICK = ["Raum verschlossen", "Mitarbeiter abwesend", "Gerät in Benutzung / nicht abschaltbar",
+  "Zugang nur mit Begleitung", "Gerät defekt – Rücksprache"];
+const GRID = 0.5, MIN = 0.5, HIST_MAX = 25;
+const TAB = Math.random().toString(36).slice(2, 10);
+
+const S = {
+  db: null, user: null, me: { id: null, name: "" }, isEditor: false, canWrite: true,
+  plans: [], areas: [], planId: null, names: {}, offline: false, live: false,
+  view: "plan", listStatus: "todo", sel: null, sheet: null, edit: false,
+};
+const $ = (s) => document.querySelector(s);
+const NS = "http://www.w3.org/2000/svg";
+function el(tag, attrs = {}, ...kids) {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v == null || v === false) continue;
+    if (k === "class") n.className = v;
+    else if (k.startsWith("on")) n.addEventListener(k.slice(2), v);
+    else if (k === "style") Object.assign(n.style, v);
+    else n.setAttribute(k, v === true ? "" : v);
+  }
+  for (const c of kids.flat()) if (c != null && c !== false) n.append(c);
+  return n;
+}
+function sv(tag, attrs = {}) { const n = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v); return n; }
+function ls(k, v) {
+  try {
+    if (v === undefined) { const r = localStorage.getItem("pp." + k); return r == null ? null : JSON.parse(r); }
+    if (v === null) localStorage.removeItem("pp." + k); else localStorage.setItem("pp." + k, JSON.stringify(v));
+  } catch { return null; }
+}
+const snap = (v) => Math.round(Number(v) / GRID) * GRID;
+const fmtM = (v) => String(Math.round(v * 10) / 10).replace(".", ",");
+function iso(d = 0) { const t = new Date(); t.setDate(t.getDate() + d);
+  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`; }
+function fmtDate(s) { if (!s) return ""; const [y, m, d] = s.slice(0, 10).split("-"); return `${d}.${m}.${y}`; }
+function fmtStamp(s) { if (!s) return ""; const d = new Date(s);
+  return `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}. ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; }
+const natural = (a, b) => String(a).localeCompare(String(b), "de", { numeric: true, sensitivity: "base" });
+const overdue = (a) => a.status === "appointment" && a.date && a.date < iso();
+function stText(a) {
+  let t = STATUS[a.status]?.label || a.status;
+  if (a.status === "partial") t += ` (${a.progress || 0} %)`;
+  if (a.status === "appointment" && a.date) t += ` ${fmtDate(a.date)}`;
+  return t;
+}
+const nameOf = (id) => (id ? (id === S.me.id ? (S.names[id] || S.me.name || "Ich") : (S.names[id] || "Kollege")) : "");
+const mine = (a) => !!S.me.id && a.inspector === S.me.id;
+const mayChange = (a) => S.canWrite && (S.isEditor || !a.inspector || a.inspector === S.me.id);
+const planAreas = () => S.areas.filter((a) => a.plan === S.planId);
+const curPlan = () => S.plans.find((p) => p.id === S.planId) || null;
+const cssVar = (n) => `var(--st-${n}-f)`, cssBorder = (n) => `var(--st-${n}-b)`;
+
+// ======================================================================
+// Daten: gemeinsame Datenbank des Artefakts (oder Vorschau ohne Speicherung)
+// ======================================================================
+function sampleData() {
+  const p = { id: "vorschau", name: "Beispiel: Verwaltung 1. OG", location: "Gebäude A", w: 36, h: 16 };
+  const a = [];
+  const mk = (name, x, y, w, h, status = "open", extra = {}) => a.push({ id: "v" + a.length, plan: p.id, name, x, y, w, h,
+    status, progress: status === "done" ? 100 : 0, date: null, note: "", notes: "", devices: 8, inspector: null, by: null, at: null, rev: 1, hist: [], ...extra });
+  ["done", "done", "partial", "appointment", "open", "open"].forEach((s, i) => mk(`Büro 1.${i + 1}`, i * 6, 0, 6, 6, s,
+    s === "partial" ? { progress: 60, note: "Kaffeeküche noch offen" } : s === "appointment" ? { date: iso(3), note: "Mitarbeiter im Urlaub" } : {}));
+  mk("Flur", 0, 6, 36, 4, "open", { devices: 4 });
+  ["done", "clarify", "appointment", "open"].forEach((s, i) => mk(`Büro 1.${i + 11}`, i * 6, 10, 6, 6, s,
+    s === "clarify" ? { note: "Raum verschlossen, Schlüssel fehlt" } : s === "appointment" ? { date: iso(-2) } : {}));
+  mk("Besprechung", 24, 10, 8, 6, "open", { devices: 6 });
+  mk("Serverraum", 32, 10, 4, 6, "open", { devices: 25, notes: "Nur nach Absprache mit der IT (Abschaltung!)" });
+  return { plans: [p], areas: a };
+}
+
+async function boot() {
+  render();
+  let db = null, user = null;
+  try { [db, user] = await Promise.all([window.claude?.use?.("db") ?? null, window.claude?.use?.("user") ?? null]); } catch { /* ohne */ }
+  S.db = db; S.user = user;
+  if (user) {
+    const me = await user.me();
+    S.me = { id: me.id, name: me.name };
+    S.isEditor = me.canEdit;
+    const w = await user.can("data.write");
+    S.canWrite = w !== false;
+    $("#me-avatar").src = me.avatarUrl; $("#me-avatar").hidden = false;
+  }
+  if (!db) {
+    const d = sampleData();
+    S.plans = d.plans; S.areas = d.areas; S.planId = d.plans[0].id; S.preview = true;
+    setBanner("Vorschau: Diese Beispieldaten werden nicht gespeichert. Im geteilten Artefakt arbeiten alle Prüfer auf demselben Stand.");
+    render(true);
+    return;
+  }
+  subscribe();
+}
+
+let loadTimer = null, gotPlans = false, gotAreas = false;
+function subscribe() {
+  loadTimer = setTimeout(() => { if (!S.live) { setOffline(true); setBanner("Die Daten sind gerade nicht erreichbar. Angezeigt wird der zuletzt bekannte Stand."); } }, 10000);
+  const onErr = (e) => { clearTimeout(loadTimer); setOffline(true); setBanner(e?.code === "revoked" ? "Kein Zugriff mehr auf die Daten." : "Verbindung zu den Daten unterbrochen. Bitte Seite später neu öffnen."); };
+  S.db.collection("plans").onSnapshot((q) => {
+    S.plans = q.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => natural(a.name, b.name));
+    gotPlans = true; freshness(q.metadata); afterData();
+  }, onErr);
+  S.db.collection("areas").onSnapshot((q) => {
+    S.areas = q.docs.map((d) => ({ id: d.id, ...d.data() }));
+    gotAreas = true; freshness(q.metadata); afterData();
+  }, onErr);
+}
+function freshness(meta) {
+  if (!meta.fromCache) { S.live = true; clearTimeout(loadTimer); setOffline(false); flushQueue(); }
+}
+let fitPending = true;
+async function afterData() {
+  if (!gotPlans || !gotAreas) return;
+  const saved = ls("plan");
+  if (!S.plans.some((p) => p.id === S.planId)) {
+    S.planId = S.plans.some((p) => p.id === saved) ? saved : (S.plans[0]?.id ?? null);
+    fitPending = true;
+  }
+  applyQueueLocally();
+  await resolveNames();
+  render(fitPending); fitPending = false;
+}
+async function resolveNames() {
+  if (!S.user) return;
+  const ids = new Set();
+  for (const a of S.areas) { if (a.inspector) ids.add(a.inspector); if (a.by) ids.add(a.by); for (const h of a.hist || []) if (h.by) ids.add(h.by); }
+  if (S.me.id) ids.add(S.me.id);
+  if (!ids.size) return;
+  const ps = await S.user.profiles([...ids]);
+  S.names = Object.fromEntries(Object.entries(ps).map(([id, p]) => [id, p.name]));
+}
+
+// ---------- Schreiben mit Konfliktschutz ----------
+class Conflict extends Error {}
+/** Liest den Bereich unter kurzer Sperre, prüft die Revision und schreibt dann. */
+async function guarded(areaId, rev, makePatch) {
+  const ref = S.db.doc("areas/" + areaId);
+  const lease = await ref.acquire({ holder: (S.me.id || "anon") + ":" + TAB, ttlMs: 5000 });
+  if (!lease.acquired) throw new Conflict("Ein anderer Prüfer ändert diesen Bereich gerade. Bitte kurz warten.");
+  const cur = await ref.get();
+  if (!cur.exists) throw new Conflict("Der Bereich wurde inzwischen gelöscht.");
+  const data = cur.data();
+  if (rev != null && (data.rev || 0) !== rev) throw new Conflict("Ein anderer Prüfer hat den Bereich gerade geändert. Die Ansicht ist aktualisiert.");
+  const patch = makePatch(data);
+  patch.rev = (data.rev || 0) + 1;
+  await ref.update(patch);
+  return { ...data, ...patch };
+}
+async function withRetry(fn) {
+  try { return await fn(); }
+  catch (e) {
+    if (e?.code !== "unavailable") throw e;
+    await new Promise((r) => setTimeout(r, 600 + Math.random() * 800));
+    return fn();
+  }
+}
+function statusPatch(cur, v) {
+  if (!mayChangeData(cur)) throw new Conflict(`Dieser Bereich ist ${nameOf(cur.inspector)} zugewiesen.`);
+  const progress = v.status === "done" ? 100 : v.status === "partial" ? v.progress : v.status === "open" ? 0 : (cur.progress || 0);
+  const at = new Date().toISOString();
+  const hist = [{ status: v.status, progress, date: v.status === "appointment" ? v.date : null, note: v.note || "", by: S.me.id, at },
+    ...(cur.hist || [])].slice(0, HIST_MAX);
+  return { status: v.status, progress, date: v.status === "appointment" ? v.date : null, note: (v.note || "").trim(),
+    inspector: cur.inspector || (v.status !== "open" ? S.me.id : null), by: S.me.id, at, hist };
+}
+const mayChangeData = (d) => S.isEditor || !d.inspector || d.inspector === S.me.id;
+
+// ---------- Offline-Warteschlange ----------
+const queue = () => ls("queue") || [];
+function applyQueueLocally() {
+  for (const q of queue()) { const a = S.areas.find((x) => x.id === q.id); if (a) Object.assign(a, q.local); }
+}
+let flushing = false;
+async function flushQueue() {
+  if (flushing || !S.db) return;
+  const q = queue(); if (!q.length) return;
+  flushing = true;
+  const left = [];
+  for (const item of q) {
+    try { await guarded(item.id, item.rev, (cur) => statusPatch(cur, item.values)); }
+    catch (e) {
+      if (e?.code === "unavailable" || e?.code === "resource_exhausted") left.push(item);
+      else toast(`„${item.name}“ nicht übertragen: ${e.message || "Fehler"}`);
+    }
+  }
+  ls("queue", left.length ? left : null);
+  flushing = false;
+  updateBanner();
+}
+
+async function setStatus(a, values, { silent = false } = {}) {
+  if (S.preview) { // Vorschau: nur lokal
+    Object.assign(a, statusPatch(a, values), { rev: (a.rev || 0) + 1 });
+    render(); if (!silent) toast(`Gespeichert: ${stText(a)} (Vorschau)`); return true;
+  }
+  try {
+    const res = await withRetry(() => guarded(a.id, a.rev, (cur) => statusPatch(cur, values)));
+    Object.assign(a, res); render();
+    if (!silent && values.status !== "done" && values.status !== "open") toast(`Gespeichert: ${stText(a)}`);
+    return true;
+  } catch (e) {
+    if (e instanceof Conflict) { toast(e.message); return false; }
+    if (e?.code === "unavailable") {
+      const local = { ...statusPatch(a, values) };
+      const q = queue().filter((x) => x.id !== a.id);
+      const prevRev = queue().find((x) => x.id === a.id)?.rev ?? a.rev;
+      q.push({ id: a.id, name: a.name, rev: prevRev, values, local });
+      ls("queue", q); Object.assign(a, local); render(); updateBanner();
+      toast("Ohne Verbindung vorgemerkt – wird automatisch übertragen.");
+      return true;
+    }
+    if (e?.code === "invalid_argument") { S.canWrite = false; toast("Sie können hier nur ansehen, nicht ändern."); render(); return false; }
+    if (e?.code === "quota_exceeded") { toast("Der Speicher ist voll. Bitte alte Grundrisse löschen."); return false; }
+    toast("Speichern fehlgeschlagen. Bitte erneut versuchen."); return false;
+  }
+}
+
+// Vorbereitung: einfache Schreibvorgänge (ohne Statusverlauf)
+async function writeArea(id, data, rev) {
+  if (S.preview) { const a = S.areas.find((x) => x.id === id); if (a) Object.assign(a, data); else S.areas.push({ id, ...data }); render(); return true; }
+  try {
+    if (rev === undefined) await withRetry(() => S.db.doc("areas/" + id).set(data));
+    else await withRetry(() => guarded(id, rev, () => ({ ...data })));
+    return true;
+  } catch (e) { toast(e instanceof Conflict ? e.message : "Speichern fehlgeschlagen. Bitte erneut versuchen."); return false; }
+}
+function newId(prefix) { return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+function newArea(planId, name, x, y, w, h, inspector = null) {
+  return { plan: planId, name, x, y, w, h, status: "open", progress: 0, date: null, note: "", notes: "", devices: 0,
+    inspector, by: null, at: null, rev: 1, hist: [] };
+}
+function clampGeom(p, x, y, w, h) {
+  w = Math.max(MIN, Math.min(p.w, snap(w))); h = Math.max(MIN, Math.min(p.h, snap(h)));
+  x = Math.min(Math.max(0, snap(x)), p.w - w); y = Math.min(Math.max(0, snap(y)), p.h - h);
+  return { x, y, w, h };
+}
+
+// ======================================================================
+// Darstellung
+// ======================================================================
+function setBanner(t) { S.bannerText = t; updateBanner(); }
+function setOffline(off) { S.offline = off; $("#conn-dot").classList.toggle("off", off); $("#conn-dot").title = off ? "keine Verbindung" : "verbunden"; updateBanner(); }
+function updateBanner() {
+  const n = queue().length, b = $("#banner");
+  const t = n ? `${n} Änderung${n > 1 ? "en" : ""} noch nicht übertragen – wird automatisch nachgeholt.` : (S.offline || S.preview ? S.bannerText : "");
+  b.textContent = t || ""; b.hidden = !t;
+}
+
+function render(fit = false) {
+  const p = curPlan();
+  $("#plan-title").textContent = p ? p.name : (S.plans.length ? "Grundriss wählen" : (gotPlans || S.preview ? "Noch kein Grundriss" : "Grundrisse werden geladen …"));
+  renderSummary(); renderPlan(fit); renderBadges();
+  if (S.view === "list") renderList();
+  if (S.view === "dates") renderDates();
+  if (S.view === "more") renderMore();
+  if (S.sheet?.kind === "area" && !S.sheet.busy) { const a = S.areas.find((x) => x.id === S.sheet.id); if (a) areaSheet(a); }
+}
+
+function renderSummary() {
+  const box = $("#summary"), list = planAreas(), p = curPlan();
+  box.hidden = !p; if (!p) return;
+  const c = Object.fromEntries(ORDER.map((k) => [k, 0])); list.forEach((a) => c[a.status]++);
+  const pct = list.length ? Math.round(list.reduce((s, a) => s + (a.progress || 0), 0) / list.length) : 0;
+  const od = list.filter(overdue).length;
+  box.replaceChildren(
+    el("div", { class: "sum-row" }, el("span", {}, el("strong", { class: "mono" }, `${pct} %`), ` geprüft · ${list.length} Bereiche`),
+      el("span", { class: "muted" }, p.location || "")),
+    el("div", { class: "bar", role: "progressbar", "aria-valuenow": pct, "aria-valuemin": 0, "aria-valuemax": 100 }, el("span", { style: { width: pct + "%" } })),
+    el("div", { class: "counts" }, ORDER.filter((k) => c[k]).map((k) => el("span", { class: "count", style: { background: cssVar(k), borderColor: cssBorder(k) } },
+      `${STATUS[k].icon} ${STATUS[k].label} ${c[k]}`)), od ? el("span", { class: "count", style: { borderColor: "var(--danger)", color: "var(--danger)" } }, `⚠ ${od} überfällig`) : null));
+}
+
+function renderBadges() {
+  const open = S.areas.filter((a) => mine(a) && a.status !== "done").length;
+  const due = S.areas.filter((a) => mine(a) && a.status === "appointment" && a.date && a.date <= iso()).length;
+  $("#badge-mine").hidden = !open; $("#badge-mine").textContent = open;
+  $("#badge-dates").hidden = !due; $("#badge-dates").textContent = due;
+}
+
+// ---------- Grundriss (SVG) ----------
+let vb = null;
+const svgEl = () => $("#plan-svg");
+function fitView() {
+  const p = curPlan(), r = svgEl().getBoundingClientRect();
+  if (!p || !r.width || !r.height) return;
+  const pad = { l: 12, r: 12, t: 60, b: 70 };
+  const aw = Math.max(60, r.width - pad.l - pad.r), ah = Math.max(60, r.height - pad.t - pad.b);
+  const s = Math.max(p.w / aw, p.h / ah);
+  vb = { x: -pad.l * s - (aw * s - p.w) / 2, y: -pad.t * s, w: r.width * s, h: r.height * s };
+  applyVb();
+}
+function applyVb() { if (vb) svgEl().setAttribute("viewBox", `${vb.x} ${vb.y} ${vb.w} ${vb.h}`); }
+const trunc = (t, n) => (t.length <= n ? t : t.slice(0, Math.max(1, n - 1)) + "…");
+
+function renderPlan(fit) {
+  const s = svgEl(), p = curPlan();
+  const empty = $("#plan-empty");
+  $("#plan-top").hidden = !p; $("#zoom-tools").hidden = !p;
+  $("#edit-toggle").hidden = !p || !S.canWrite;
+  $("#row-btn").hidden = !S.edit; $("#edit-hint").hidden = !S.edit;
+  $("#edit-toggle").classList.toggle("on", S.edit);
+  $("#edit-toggle").textContent = S.edit ? "✓ Fertig" : "✎ Bearbeiten";
+  if (!p) {
+    s.replaceChildren();
+    const loading = !(gotPlans || S.preview);
+    empty.hidden = false;
+    empty.replaceChildren(el("h2", {}, loading ? "Grundrisse werden geladen …" : "Noch kein Grundriss"),
+      el("p", {}, loading ? "Gleich erscheinen hier die Räume der Abteilung, farbig nach Prüfstand." :
+        "Legen Sie zuerst den Grundriss der Abteilung an: Name, Breite und Tiefe in Metern. Danach zeichnen Sie die Räume mit dem Finger ein."),
+      !loading && S.canWrite ? el("button", { class: "btn primary", type: "button", onclick: () => planForm() }, "Grundriss anlegen") : null);
+    return;
+  }
+  empty.hidden = true;
+  s.replaceChildren();
+  s.append(sv("rect", { class: "p-surface", x: 0, y: 0, width: p.w, height: p.h }));
+  const g = sv("g", { class: "p-grid" });
+  for (let x = 1; x < p.w; x++) g.append(sv("line", { x1: x, y1: 0, x2: x, y2: p.h }));
+  for (let y = 1; y < p.h; y++) g.append(sv("line", { x1: 0, y1: y, x2: p.w, y2: y }));
+  s.append(g, sv("rect", { class: "p-wall", x: 0, y: 0, width: p.w, height: p.h }));
+  const only = $("#only-mine").checked;
+  for (const a of planAreas().sort((x, y) => natural(x.name, y.name))) {
+    const cls = ["area", overdue(a) && "overdue", a.id === S.sel && "sel", only && !mine(a) && "dim"].filter(Boolean).join(" ");
+    const grp = sv("g", { class: cls, "data-id": a.id });
+    grp.append(sv("rect", { class: `box f-${a.status}`, x: a.x + .04, y: a.y + .04, width: a.w - .08, height: a.h - .08 }));
+    if (a.status === "partial") grp.append(sv("rect", { class: `k-partial`, x: a.x + .15, y: a.y + a.h - .3, width: (a.w - .3) * (a.progress || 0) / 100, height: .14 }));
+    const fs = Math.max(.28, Math.min(.75, a.w / 7, a.h / 3.6));
+    const t1 = sv("text", { class: "t1", x: a.x + .18, y: a.y + .15 + fs, "font-size": fs });
+    t1.textContent = trunc(`${STATUS[a.status].icon} ${a.name}`, Math.max(3, Math.floor((a.w - .3) / (fs * .56))));
+    grp.append(t1);
+    const lines = [a.status !== "open" ? stText(a) : "", a.inspector ? nameOf(a.inspector) : ""].filter(Boolean);
+    const fs2 = fs * .78, room = Math.floor((a.h - fs - .4) / (fs2 * 1.2));
+    lines.slice(0, Math.max(0, room)).forEach((line, i) => {
+      const t = sv("text", { class: "t2", x: a.x + .18, y: a.y + .2 + fs + (i + 1) * fs2 * 1.25, "font-size": fs2 });
+      t.textContent = trunc(line, Math.floor((a.w - .3) / (fs2 * .56))); grp.append(t);
+    });
+    s.append(grp);
+  }
+  if (fit || !vb) requestAnimationFrame(fitView); else applyVb();
+}
+
+// ---------- Gesten: Zoomen, Verschieben, Antippen, Zeichnen ----------
+const ptrs = new Map();
+let G = null;
+function toPlan(cx, cy) {
+  const r = svgEl().getBoundingClientRect();
+  const sc = Math.max(vb.w / r.width, vb.h / r.height);
+  const ox = (r.width * sc - vb.w) / 2, oy = (r.height * sc - vb.h) / 2;
+  return { x: vb.x - ox + (cx - r.left) * sc, y: vb.y - oy + (cy - r.top) * sc, sc };
+}
+function zoomAt(f, cx, cy) {
+  const p = curPlan(); if (!vb || !p) return;
+  const nw = Math.min((p.w + 2) * 3, Math.max(2, vb.w / f)); f = vb.w / nw;
+  const q = toPlan(cx, cy);
+  vb = { x: q.x - (q.x - vb.x) / f, y: q.y - (q.y - vb.y) / f, w: vb.w / f, h: vb.h / f }; applyVb();
+}
+function pinch() { const [a, b] = [...ptrs.values()]; return { d: Math.hypot(a.x - b.x, a.y - b.y), cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2 }; }
+function cancelEditGesture() {
+  if (G?.rubber) G.rubber.remove(), G.rubberLabel?.remove();
+  if (G?.moveEl) G.moveEl.removeAttribute("transform"), G.moveEl.classList.remove("moving");
+}
+function onDown(e) {
+  if (!vb) return;
+  svgEl().setPointerCapture(e.pointerId);
+  ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (ptrs.size === 1) {
+    const areaEl = e.target.closest?.(".area");
+    G = { tap: true, t: Date.now(), x0: e.clientX, y0: e.clientY, last: { x: e.clientX, y: e.clientY }, areaEl,
+      start: toPlan(e.clientX, e.clientY), mode: S.edit ? (areaEl ? "move" : "draw") : "pan" };
+  } else { cancelEditGesture(); G = { tap: false, mode: "pinch", pin: pinch() }; }
+}
+function onMove(e) {
+  if (!ptrs.has(e.pointerId) || !G) return;
+  ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (G.mode === "pinch" && ptrs.size >= 2) {
+    const now = pinch();
+    if (G.pin.d > 0) zoomAt(now.d / G.pin.d, now.cx, now.cy);
+    const q = toPlan(0, 0); vb.x -= (now.cx - G.pin.cx) * q.sc; vb.y -= (now.cy - G.pin.cy) * q.sc; applyVb(); G.pin = now; return;
+  }
+  if (ptrs.size !== 1) return;
+  if (Math.hypot(e.clientX - G.x0, e.clientY - G.y0) > 8) G.tap = false;
+  if (G.tap) return;
+  const p = curPlan(), q = toPlan(e.clientX, e.clientY);
+  if (G.mode === "pan") {
+    const sc = q.sc; vb.x -= (e.clientX - G.last.x) * sc; vb.y -= (e.clientY - G.last.y) * sc; applyVb();
+  } else if (G.mode === "draw") {
+    const x0 = Math.min(Math.max(0, snap(G.start.x)), p.w), y0 = Math.min(Math.max(0, snap(G.start.y)), p.h);
+    const x1 = Math.min(Math.max(0, snap(q.x)), p.w), y1 = Math.min(Math.max(0, snap(q.y)), p.h);
+    G.rect = { x: Math.min(x0, x1), y: Math.min(y0, y1), w: Math.abs(x1 - x0), h: Math.abs(y1 - y0) };
+    if (!G.rubber) { G.rubber = sv("rect", { class: "rubber" }); G.rubberLabel = sv("text", { class: "rubber-label", "font-size": .5 }); svgEl().append(G.rubber, G.rubberLabel); }
+    for (const [k, v] of Object.entries({ x: G.rect.x, y: G.rect.y, width: G.rect.w, height: G.rect.h })) G.rubber.setAttribute(k, v);
+    G.rubberLabel.setAttribute("x", G.rect.x + .1); G.rubberLabel.setAttribute("y", G.rect.y - .15);
+    G.rubberLabel.textContent = `${fmtM(G.rect.w)} × ${fmtM(G.rect.h)} m`;
+  } else if (G.mode === "move" && G.areaEl) {
+    const a = S.areas.find((x) => x.id === G.areaEl.dataset.id);
+    if (!a || !mayEditArea(a)) { G.mode = "pan"; return; }
+    const g = clampGeom(p, a.x + (q.x - G.start.x), a.y + (q.y - G.start.y), a.w, a.h);
+    G.moveTo = g; G.moveEl = G.areaEl; G.areaEl.classList.add("moving");
+    G.areaEl.setAttribute("transform", `translate(${g.x - a.x} ${g.y - a.y})`);
+  }
+  G.last = { x: e.clientX, y: e.clientY };
+}
+function onUp(e) {
+  if (!ptrs.has(e.pointerId)) return;
+  ptrs.delete(e.pointerId);
+  const g = G;
+  if (ptrs.size === 0) G = null;
+  else if (ptrs.size === 1) { const [p] = ptrs.values(); G = { tap: false, mode: "pan", last: { ...p }, x0: 0, y0: 0 }; return; }
+  if (!g || g.mode === "pinch") return;
+  if (g.tap && Date.now() - g.t < 650) {
+    if (g.areaEl) { const id = g.areaEl.dataset.id; S.edit ? editAreaSheet(id) : openArea(id); }
+    return;
+  }
+  if (g.mode === "draw" && g.rect) {
+    g.rubber?.remove(); g.rubberLabel?.remove();
+    if (g.rect.w >= MIN && g.rect.h >= MIN) newRoomSheet(g.rect);
+  }
+  if (g.mode === "move" && g.moveTo) {
+    const a = S.areas.find((x) => x.id === g.areaEl.dataset.id), to = g.moveTo;
+    if (a && (to.x !== a.x || to.y !== a.y)) {
+      const old = { x: a.x, y: a.y };
+      Object.assign(a, { x: to.x, y: to.y }); render();
+      writeArea(a.id, { x: to.x, y: to.y }, a.rev).then((ok) => { if (!ok) { Object.assign(a, old); render(); } });
+    } else render();
+  }
+}
+const mayEditArea = (a) => S.canWrite;
+
+// ======================================================================
+// Bottom-Sheet
+// ======================================================================
+function openSheet(kind, content, extra = {}) {
+  const sh = $("#sheet");
+  sh.replaceChildren(el("div", { class: "grabber", "aria-hidden": "true" }), content);
+  sh.hidden = false; $("#backdrop").hidden = false;
+  S.sheet = { kind, ...extra };
+}
+function closeSheet() {
+  $("#sheet").hidden = true; $("#backdrop").hidden = true; S.sheet = null;
+  if (S.sel) { S.sel = null; renderPlan(false); }
+}
+function openArea(id) {
+  const a = S.areas.find((x) => x.id === id); if (!a) return;
+  S.sel = id; if (a.plan === S.planId) renderPlan(false);
+  areaSheet(a);
+}
+
+function areaSheet(a) {
+  const facts = el("dl", { class: "facts" });
+  const f = (k, v) => v && facts.append(el("dt", {}, k), el("dd", {}, v));
+  f("Prüfer", a.inspector ? nameOf(a.inspector) : "nicht zugewiesen");
+  if (a.status === "appointment") f("Termin", fmtDate(a.date) + (overdue(a) ? " – überfällig" : ""));
+  f("Bemerkung", a.note); f("Hinweise", a.notes);
+  f("Prüflinge", a.devices ? `ca. ${a.devices}` : "");
+  f("Geändert", a.at ? `${a.by ? nameOf(a.by) : "—"}, ${fmtStamp(a.at)}` : "");
+  const ok = mayChange(a);
+  const act = (k, text, cls = "") => el("button", { type: "button", class: `act ${cls}`, disabled: !ok,
+    style: { background: cssVar(k), borderColor: cssBorder(k) },
+    onclick: () => (k === "done" || k === "open") ? quick(a, k) : statusForm(a, k) }, text);
+  const plan = S.plans.find((p) => p.id === a.plan);
+  const hist = el("details", { class: "hist" }, el("summary", {}, `Verlauf (${(a.hist || []).length})`),
+    ...((a.hist || []).length ? a.hist.map((h) => el("div", { class: "hist-item" },
+      el("div", {}, el("strong", {}, `${STATUS[h.status]?.icon || ""} ${STATUS[h.status]?.label || h.status}`),
+        h.status === "partial" ? ` (${h.progress} %)` : "", h.date ? ` am ${fmtDate(h.date)}` : ""),
+      el("div", { class: "muted" }, `${fmtStamp(h.at)} · ${h.by ? nameOf(h.by) : "—"}`), h.note ? el("div", {}, h.note) : null))
+      : [el("p", { class: "muted", style: { margin: 0 } }, "Noch keine Statusänderung.")]));
+  openSheet("area", el("div", { style: { display: "grid", gap: "12px" } },
+    el("h2", { id: "sheet-title" }, a.name),
+    el("p", { class: "sub" }, `${plan?.name || ""} · `, el("span", { class: "mono" }, `${fmtM(a.w)} × ${fmtM(a.h)} m`)),
+    el("span", { class: "st-pill", style: { background: cssVar(a.status), borderColor: overdue(a) ? "var(--danger)" : cssBorder(a.status) } }, `${STATUS[a.status].icon} ${stText(a)}`),
+    facts,
+    !S.canWrite ? el("div", { class: "notice" }, "Sie haben nur Lesezugriff auf diese Prüfplanung.") :
+      !ok ? el("div", { class: "notice" }, `Dieser Bereich ist ${nameOf(a.inspector)} zugewiesen.`) : null,
+    ok && !a.inspector && S.me.id ? el("button", { type: "button", class: "btn block", onclick: () => claim(a) }, "Bereich übernehmen") : null,
+    el("div", { class: "actions" }, act("done", "✔ Erledigt", "wide"), act("partial", "◑ Teilweise"), act("appointment", "◷ Termin"),
+      act("clarify", "? Klärung"), act("open", "○ Offen")),
+    hist), { id: a.id });
+}
+
+function statusForm(a, key) {
+  S.sheet && (S.sheet.busy = true);
+  const note = el("textarea", { id: "f-note", rows: 3, placeholder: key === "clarify" ? "Was muss geklärt werden?" : "Bemerkung (optional)" });
+  note.value = a.status === key ? (a.note || "") : "";
+  const err = el("p", { class: "err", role: "alert" });
+  note.addEventListener("input", () => { err.textContent = ""; });
+  const rows = [];
+  let date, range;
+  if (key === "appointment") {
+    date = el("input", { id: "f-date", type: "date", value: a.status === "appointment" && a.date ? a.date : iso(1) });
+    rows.push(el("div", { class: "field" }, el("label", { for: "f-date" }, "Termin am"), date,
+      el("div", { class: "quick" }, [["Morgen", 1], ["Übermorgen", 2], ["In 1 Woche", 7]].map(([t, d]) =>
+        el("button", { type: "button", class: "chip", onclick: () => { date.value = iso(d); } }, t)))));
+  }
+  if (key === "partial") {
+    const out = el("output", { for: "f-range" });
+    range = el("input", { id: "f-range", type: "range", min: 10, max: 90, step: 10,
+      value: a.status === "partial" ? Math.min(90, Math.max(10, Math.round((a.progress || 50) / 10) * 10)) : 50 });
+    const upd = () => { out.textContent = range.value + " %"; }; range.addEventListener("input", upd); upd();
+    rows.push(el("div", { class: "field" }, el("label", { for: "f-range" }, "Wie weit ist der Bereich geprüft?"), el("div", { class: "range-row" }, range, out)));
+  }
+  rows.push(el("div", { class: "field" }, el("label", { for: "f-note" }, key === "clarify" ? "Grund *" : "Bemerkung"), note,
+    key === "clarify" ? el("div", { class: "quick" }, CLARIFY_QUICK.map((q) => el("button", { type: "button", class: "chip",
+      onclick: () => { note.value = note.value ? `${note.value}; ${q}` : q; err.textContent = ""; } }, q))) : null));
+  const save = el("button", { type: "button", class: "btn primary" }, "Speichern");
+  save.addEventListener("click", async () => {
+    if (key === "clarify" && !note.value.trim()) { err.textContent = "Bitte einen Grund angeben, z. B. „Raum verschlossen“."; return; }
+    if (key === "appointment" && !date.value) { err.textContent = "Bitte ein Datum wählen."; return; }
+    save.disabled = true;
+    const ok = await setStatus(a, { status: key, note: note.value, date: date?.value || null, progress: range ? Number(range.value) : null });
+    save.disabled = false;
+    if (ok) closeSheet(); else { S.sheet.busy = false; const fresh = S.areas.find((x) => x.id === a.id); if (fresh) areaSheet(fresh); }
+  });
+  openSheet("area", el("div", { style: { display: "grid", gap: "12px" } },
+    el("h2", { id: "sheet-title" }, a.name),
+    el("span", { class: "st-pill", style: { background: cssVar(key), borderColor: cssBorder(key) } }, `${STATUS[key].icon} ${STATUS[key].label}`),
+    ...rows, err,
+    el("div", { class: "btn-row" }, el("button", { type: "button", class: "btn", onclick: () => { S.sheet.busy = false; areaSheet(S.areas.find((x) => x.id === a.id) || a); } }, "Zurück"), save)),
+    { id: a.id, busy: true });
+  if (key === "clarify") setTimeout(() => note.focus(), 60);
+}
+
+async function quick(a, key) {
+  const before = { status: a.status, note: a.note, date: a.date, progress: a.progress };
+  if (!(await setStatus(a, { status: key, note: "", date: null, progress: null }))) return;
+  closeSheet();
+  if (before.status !== key) toast(`„${a.name}“: ${STATUS[key].label}`, "Rückgängig", () => {
+    const cur = S.areas.find((x) => x.id === a.id) || a;
+    setStatus(cur, { status: before.status, note: before.note || "", date: before.date, progress: before.status === "partial" ? before.progress : null }, { silent: true });
+  });
+}
+
+async function claim(a) {
+  if (S.preview) { a.inspector = S.me.id || "ich"; render(); toast("Bereich übernommen (Vorschau)"); return; }
+  try {
+    const res = await withRetry(() => guarded(a.id, a.rev, (cur) => {
+      if (cur.inspector && cur.inspector !== S.me.id) throw new Conflict(`Der Bereich wurde gerade von ${nameOf(cur.inspector)} übernommen.`);
+      return { inspector: S.me.id };
+    }));
+    Object.assign(a, res); render(); toast("Bereich übernommen");
+  } catch (e) { toast(e instanceof Conflict ? e.message : "Übernehmen fehlgeschlagen."); }
+}
+
+// ---------- Vorbereitung ----------
+function numField(id, label, value, step = 0.5, min = 0) {
+  return el("div", { class: "field" }, el("label", { for: id }, label),
+    el("input", { id, type: "number", inputmode: "decimal", step, min, value }));
+}
+const num = (id) => Number(String($("#" + id).value).replace(",", "."));
+
+function planForm(plan = null) {
+  const err = el("p", { class: "err", role: "alert" });
+  openSheet("plan-form", el("div", { style: { display: "grid", gap: "12px" } },
+    el("h2", { id: "sheet-title" }, plan ? "Grundriss bearbeiten" : "Neuer Grundriss"),
+    el("div", { class: "field" }, el("label", { for: "pf-name" }, "Bezeichnung (Abteilung / Etage)"),
+      el("input", { id: "pf-name", value: plan?.name || "", placeholder: "z. B. Verwaltung 2. OG" })),
+    el("div", { class: "field" }, el("label", { for: "pf-loc" }, "Standort / Gebäude"), el("input", { id: "pf-loc", value: plan?.location || "" })),
+    el("div", { class: "grid2" }, numField("pf-w", "Breite (m)", plan?.w ?? 40, 1, 2), numField("pf-h", "Tiefe (m)", plan?.h ?? 20, 1, 2)),
+    err,
+    el("div", { class: "btn-row" }, el("button", { type: "button", class: "btn", onclick: closeSheet }, "Abbrechen"),
+      el("button", { type: "button", class: "btn primary", onclick: async () => {
+        const name = $("#pf-name").value.trim(), w = num("pf-w"), h = num("pf-h");
+        if (!name) { err.textContent = "Bitte eine Bezeichnung eingeben."; return; }
+        if (!(w >= 2 && w <= 500 && h >= 2 && h <= 500)) { err.textContent = "Breite und Tiefe zwischen 2 und 500 m angeben."; return; }
+        const id = plan?.id || newId("p");
+        const data = { name, location: $("#pf-loc").value.trim(), w, h };
+        if (S.preview) { const ex = S.plans.find((x) => x.id === id); ex ? Object.assign(ex, data) : S.plans.push({ id, ...data }); }
+        else { try { await withRetry(() => plan ? S.db.doc("plans/" + id).update(data) : S.db.doc("plans/" + id).set(data)); }
+          catch { err.textContent = "Speichern fehlgeschlagen. Bitte erneut versuchen."; return; } }
+        closeSheet(); S.planId = id; ls("plan", id); fitPending = true;
+        if (!plan) { S.edit = true; toast("Grundriss angelegt. Jetzt Räume mit dem Finger aufziehen."); }
+        render(true); setView("plan");
+      } }, "Speichern")),
+    plan && S.isEditor ? el("button", { type: "button", class: "btn danger block", onclick: () => confirmDeletePlan(plan) }, "Grundriss löschen …") : null));
+}
+
+function confirmDeletePlan(plan) {
+  const n = S.areas.filter((a) => a.plan === plan.id).length;
+  openSheet("confirm", el("div", { style: { display: "grid", gap: "12px" } },
+    el("h2", { id: "sheet-title" }, "Grundriss löschen?"),
+    el("p", { style: { margin: 0 } }, `„${plan.name}“ mit ${n} Bereichen und dem gesamten Statusverlauf wird für alle Prüfer gelöscht.`),
+    el("div", { class: "btn-row" }, el("button", { type: "button", class: "btn", onclick: closeSheet }, "Abbrechen"),
+      el("button", { type: "button", class: "btn danger", onclick: async () => {
+        if (S.preview) { S.areas = S.areas.filter((a) => a.plan !== plan.id); S.plans = S.plans.filter((p) => p.id !== plan.id); }
+        else {
+          try { for (const a of S.areas.filter((x) => x.plan === plan.id)) await S.db.doc("areas/" + a.id).delete();
+            await S.db.doc("plans/" + plan.id).delete(); }
+          catch { toast("Löschen nicht vollständig. Bitte erneut versuchen."); }
+        }
+        S.planId = null; closeSheet(); render(true); toast("Grundriss gelöscht");
+      } }, "Endgültig löschen"))));
+}
+
+function newRoomSheet(rect) {
+  const p = curPlan();
+  const err = el("p", { class: "err", role: "alert" });
+  const input = el("input", { id: "nr-name", value: `Raum ${planAreas().length + 1}`, enterkeyhint: "done" });
+  const save = async () => {
+    const name = input.value.trim(); if (!name) { err.textContent = "Bitte eine Bezeichnung eingeben."; return; }
+    const g = clampGeom(p, rect.x, rect.y, rect.w, rect.h);
+    if (await writeArea(newId("a"), newArea(p.id, name, g.x, g.y, g.w, g.h))) { closeSheet(); toast(`„${name}“ angelegt`); }
+  };
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") save(); });
+  openSheet("new-room", el("div", { style: { display: "grid", gap: "12px" } },
+    el("h2", { id: "sheet-title" }, "Neuer Prüfbereich"),
+    el("p", { class: "sub mono" }, `${fmtM(rect.w)} × ${fmtM(rect.h)} m`),
+    el("div", { class: "field" }, el("label", { for: "nr-name" }, "Bezeichnung"), input), err,
+    el("div", { class: "btn-row" }, el("button", { type: "button", class: "btn", onclick: closeSheet }, "Abbrechen"),
+      el("button", { type: "button", class: "btn primary", onclick: save }, "Anlegen"))));
+  setTimeout(() => { input.focus(); input.select(); }, 60);
+}
+
+function rowSheet() {
+  const p = curPlan(); if (!p) return;
+  const err = el("p", { class: "err", role: "alert" });
+  openSheet("row", el("div", { style: { display: "grid", gap: "12px" } },
+    el("h2", { id: "sheet-title" }, "Raumreihe anlegen"),
+    el("p", { class: "sub" }, "Mehrere gleich große Räume auf einmal, z. B. Büros entlang eines Flurs."),
+    el("div", { class: "grid2" },
+      el("div", { class: "field" }, el("label", { for: "rw-prefix" }, "Präfix"), el("input", { id: "rw-prefix", value: "Büro 1." })),
+      numField("rw-start", "Erste Nummer", 1, 1, 0)),
+    el("div", { class: "grid2" }, numField("rw-count", "Anzahl", 6, 1, 1),
+      el("div", { class: "field" }, el("label", { for: "rw-dir" }, "Anordnung"),
+        el("select", { id: "rw-dir" }, el("option", { value: "h" }, "nebeneinander →"), el("option", { value: "v" }, "untereinander ↓")))),
+    el("div", { class: "grid2" }, numField("rw-x", "Start links (m)", 0), numField("rw-y", "Start oben (m)", 0)),
+    el("div", { class: "grid2" }, numField("rw-w", "Breite je Raum (m)", 6, .5, .5), numField("rw-h", "Tiefe je Raum (m)", 5, .5, .5)),
+    el("p", { class: "muted", style: { margin: 0, fontSize: "14px" } }, `Grundriss: ${fmtM(p.w)} × ${fmtM(p.h)} m. Beispiel: Präfix „Büro 1.“, Nummer 1, Anzahl 6 → Büro 1.1 bis Büro 1.6.`),
+    err,
+    el("div", { class: "btn-row" }, el("button", { type: "button", class: "btn", onclick: closeSheet }, "Abbrechen"),
+      el("button", { type: "button", class: "btn primary", onclick: async (ev) => {
+        const pre = $("#rw-prefix").value, start = Math.round(num("rw-start")), n = Math.round(num("rw-count"));
+        const horiz = $("#rw-dir").value === "h", x = snap(num("rw-x")), y = snap(num("rw-y")), w = snap(num("rw-w")), h = snap(num("rw-h"));
+        if (!(n >= 1 && n <= 60)) { err.textContent = "Anzahl zwischen 1 und 60 angeben."; return; }
+        if (!(w >= MIN && h >= MIN)) { err.textContent = "Breite und Tiefe mindestens 0,5 m."; return; }
+        const ex = horiz ? x + w * n : x + w, ey = horiz ? y + h : y + h * n;
+        if (ex > p.w + 1e-6 || ey > p.h + 1e-6) { err.textContent = `Passt nicht auf den Grundriss (bis ${fmtM(ex)} × ${fmtM(ey)} m nötig).`; return; }
+        ev.target.disabled = true;
+        for (let i = 0; i < n; i++) {
+          const ok = await writeArea(newId("a"), newArea(p.id, `${pre}${start + i}`, horiz ? x + i * w : x, horiz ? y : y + i * h, w, h));
+          if (!ok) { ev.target.disabled = false; return; }
+        }
+        closeSheet(); toast(`${n} Räume angelegt`);
+      } }, "Anlegen"))));
+}
+
+function editAreaSheet(id) {
+  const a = S.areas.find((x) => x.id === id), p = curPlan(); if (!a || !p) return;
+  S.sel = id; renderPlan(false);
+  const err = el("p", { class: "err", role: "alert" });
+  let inspector = a.inspector;
+  const who = el("div", { class: "people" });
+  const renderWho = (hits = null) => {
+    who.replaceChildren(el("div", { class: "lbl muted", style: { fontSize: "14px" } }, "Prüfer: ", el("strong", {}, inspector ? nameOf(inspector) : "nicht zugewiesen")));
+    if (hits) for (const h of hits) who.append(el("button", { type: "button", class: "person", onclick: () => { inspector = h.id; S.names[h.id] = h.name; renderWho(); } },
+      el("img", { src: h.avatarUrl, alt: "" }), el("span", {}, h.name)));
+  };
+  renderWho();
+  const search = S.user ? el("input", { id: "ea-search", type: "search", placeholder: "Prüfer suchen (Name) …", autocomplete: "off" }) : null;
+  search?.addEventListener("focus", async () => renderWho(await S.user.search("")));
+  search?.addEventListener("input", async () => renderWho(await S.user.search(search.value)));
+  openSheet("edit", el("div", { style: { display: "grid", gap: "12px" } },
+    el("h2", { id: "sheet-title" }, "Bereich bearbeiten"),
+    el("div", { class: "field" }, el("label", { for: "ea-name" }, "Bezeichnung"), el("input", { id: "ea-name", value: a.name })),
+    el("div", { class: "grid2" }, numField("ea-x", "Links (m)", a.x), numField("ea-y", "Oben (m)", a.y)),
+    el("div", { class: "grid2" }, numField("ea-w", "Breite (m)", a.w, .5, .5), numField("ea-h", "Tiefe (m)", a.h, .5, .5)),
+    el("div", { class: "field" }, el("label", { for: "ea-dev" }, "Prüflinge (ca. Anzahl)"), el("input", { id: "ea-dev", type: "number", inputmode: "numeric", min: 0, value: a.devices || 0 })),
+    el("div", { class: "field" }, el("label", { for: "ea-notes" }, "Hinweise (Zugang, Ansprechpartner …)"), el("textarea", { id: "ea-notes", rows: 2 }, a.notes || "")),
+    el("div", { class: "field" }, who, search,
+      el("div", { class: "quick" },
+        S.me.id ? el("button", { type: "button", class: "chip", onclick: () => { inspector = S.me.id; renderWho(); } }, "Mir zuweisen") : null,
+        el("button", { type: "button", class: "chip", onclick: () => { inspector = null; renderWho(); } }, "Zuweisung entfernen"))),
+    err,
+    el("div", { class: "btn-row" }, el("button", { type: "button", class: "btn", onclick: closeSheet }, "Abbrechen"),
+      el("button", { type: "button", class: "btn primary", onclick: async () => {
+        const name = $("#ea-name").value.trim(); if (!name) { err.textContent = "Bitte eine Bezeichnung eingeben."; return; }
+        const g = clampGeom(p, num("ea-x"), num("ea-y"), num("ea-w"), num("ea-h"));
+        const data = { name, ...g, devices: Math.max(0, Math.round(num("ea-dev") || 0)), notes: $("#ea-notes").value, inspector };
+        if (await writeArea(a.id, data, S.preview ? undefined : a.rev)) { if (S.preview) Object.assign(a, data); closeSheet(); render(); toast("Gespeichert"); }
+      } }, "Speichern")),
+    el("div", { class: "btn-row" },
+      el("button", { type: "button", class: "btn", onclick: async () => {
+        const g = clampGeom(p, a.x + a.w <= p.w - a.w ? a.x + a.w : a.x, a.x + a.w <= p.w - a.w ? a.y : Math.min(a.y + a.h, p.h - a.h), a.w, a.h);
+        if (await writeArea(newId("a"), { ...newArea(p.id, a.name + " (Kopie)", g.x, g.y, g.w, g.h, a.inspector), devices: a.devices || 0, notes: a.notes || "" })) { closeSheet(); toast("Kopie angelegt"); }
+      } }, "Duplizieren"),
+      el("button", { type: "button", class: "btn danger", onclick: async () => {
+        if (S.preview) S.areas = S.areas.filter((x) => x.id !== a.id);
+        else { try { await withRetry(() => S.db.doc("areas/" + a.id).delete()); } catch { toast("Löschen fehlgeschlagen."); return; } }
+        closeSheet(); render(); toast(`„${a.name}“ gelöscht`);
+      } }, "Löschen"))), { id });
+}
+
+function planPicker() {
+  openSheet("plans", el("div", { style: { display: "grid", gap: "8px" } },
+    el("h2", { id: "sheet-title" }, "Grundriss wählen"),
+    S.plans.length ? el("div", {}, S.plans.map((p) => {
+      const list = S.areas.filter((a) => a.plan === p.id);
+      const pct = list.length ? Math.round(list.reduce((s, a) => s + (a.progress || 0), 0) / list.length) : 0;
+      const od = list.filter(overdue).length;
+      return el("button", { type: "button", class: "plan-opt", "aria-current": p.id === S.planId ? "true" : "false",
+        onclick: () => { S.planId = p.id; ls("plan", p.id); S.edit = false; closeSheet(); setView("plan"); render(true); } },
+        el("span", {}, el("strong", {}, p.name), p.location ? el("span", { class: "muted" }, ` · ${p.location}`) : null),
+        el("span", { class: "muted", style: { fontSize: "14px" } }, `${list.length} Bereiche · `, el("span", { class: "mono" }, `${pct} %`), " geprüft", od ? ` · ⚠ ${od} überfällig` : ""),
+        el("span", { class: "bar" }, el("span", { style: { width: pct + "%" } })));
+    })) : el("p", { class: "muted" }, "Noch kein Grundriss vorhanden."),
+    el("div", { class: "btn-row" },
+      S.canWrite ? el("button", { type: "button", class: "btn", onclick: () => planForm() }, "＋ Neuer Grundriss") : null,
+      curPlan() && S.canWrite ? el("button", { type: "button", class: "btn", onclick: () => planForm(curPlan()) }, "Eigenschaften") : null)));
+}
+
+// ======================================================================
+// Listen
+// ======================================================================
+function card(a, sub) {
+  const plan = S.plans.find((p) => p.id === a.plan);
+  return el("li", {}, el("button", { type: "button", class: `card${overdue(a) ? " overdue" : ""}`, onclick: () => openArea(a.id) },
+    el("span", { class: "stripe", style: { background: cssBorder(a.status) } }),
+    el("span", { class: "ci" },
+      el("span", { class: "t" }, el("span", {}, a.name), el("span", { class: "muted" }, STATUS[a.status].icon)),
+      el("span", { class: "s" }, sub ?? `${stText(a)}${overdue(a) ? " – überfällig" : ""} · ${plan?.name || ""}`),
+      a.note || a.notes ? el("span", { class: "n" }, a.note || a.notes) : null)));
+}
+function buildChips() {
+  const box = $("#status-chips"); box.replaceChildren();
+  const chip = (k, t) => el("button", { type: "button", class: `chip${S.listStatus === k ? " on" : ""}`, "aria-pressed": S.listStatus === k ? "true" : "false",
+    onclick: () => { S.listStatus = k; buildChips(); renderList(); } }, t);
+  box.append(chip("todo", "Noch zu tun"), chip("", "Alle"), ...ORDER.map((k) => chip(k, `${STATUS[k].icon} ${STATUS[k].label}`)));
+}
+function renderList() {
+  const q = $("#search").value.trim().toLowerCase(), all = $("#list-all").checked || !S.me.id;
+  let items = S.areas.filter((a) => (all || mine(a)) && (!q || `${a.name} ${a.note} ${a.notes}`.toLowerCase().includes(q)));
+  if (S.listStatus === "todo") items = items.filter((a) => a.status !== "done");
+  else if (S.listStatus) items = items.filter((a) => a.status === S.listStatus);
+  items.sort((x, y) => ORDER.indexOf(x.status) - ORDER.indexOf(y.status) || natural(x.name, y.name));
+  const ul = $("#area-list"); ul.replaceChildren();
+  if (!items.length) {
+    ul.append(el("li", { class: "note-empty" }, all ? "Keine passenden Bereiche." :
+      "Ihnen ist noch kein Bereich zugewiesen. Bereiche übernehmen Sie im Grundriss mit „Bereich übernehmen“ – oder schalten Sie oben „auch Bereiche anderer Prüfer“ ein."));
+    return;
+  }
+  let grp = null;
+  for (const a of items) { if (a.status !== grp) { grp = a.status; ul.append(el("li", { class: "group-h" }, STATUS[grp].label)); } ul.append(card(a)); }
+}
+function renderDates() {
+  const all = $("#dates-all").checked || !S.me.id;
+  const items = S.areas.filter((a) => a.status === "appointment" && (all || mine(a))).sort((x, y) => (x.date || "").localeCompare(y.date || ""));
+  const ul = $("#date-list"); ul.replaceChildren();
+  if (!items.length) { ul.append(el("li", { class: "note-empty" }, "Keine offenen Termine.")); return; }
+  const today = iso(), tom = iso(1); let grp = null;
+  for (const a of items) {
+    const g = !a.date ? "Ohne Datum" : a.date < today ? "Überfällig" : a.date === today ? "Heute" : a.date === tom ? "Morgen" : fmtDate(a.date);
+    if (g !== grp) { grp = g; ul.append(el("li", { class: "group-h" }, g)); }
+    const plan = S.plans.find((p) => p.id === a.plan);
+    ul.append(card(a, `${fmtDate(a.date)} · ${plan?.name || ""}${all && a.inspector ? " · " + nameOf(a.inspector) : ""}`));
+  }
+}
+function renderMore() {
+  $("#me-name").textContent = S.me.name || (S.me.id ? "Angemeldet" : "Gast");
+  $("#me-role").textContent = S.preview ? "Vorschau ohne Speicherung" : S.isEditor ? "Bearbeiter dieser Prüfplanung" : S.canWrite ? "Prüfer" : "nur Lesezugriff";
+  $("#new-plan-btn").hidden = !S.canWrite;
+}
+
+// ======================================================================
+// Navigation, Hinweise, Start
+// ======================================================================
+const VIEWS = { plan: "plan", meine: "list", termine: "dates", mehr: "more" };
+const HASH = { plan: "plan", list: "meine", dates: "termine", more: "mehr" };
+function setView(v, fromHash = false) {
+  S.view = v;
+  for (const k of ["plan", "list", "dates", "more"]) $("#view-" + k).hidden = k !== v;
+  for (const b of document.querySelectorAll(".tabbar button")) b.toggleAttribute("aria-current", b.dataset.view === v), b.dataset.view === v && b.setAttribute("aria-current", "page");
+  if (!fromHash && location.hash !== "#" + HASH[v]) history.replaceState(null, "", "#" + HASH[v]);
+  if (v === "plan") requestAnimationFrame(() => (vb ? applyVb() : fitView()));
+  render();
+}
+let toastT = null;
+function toast(text, action, fn) {
+  const t = $("#toast"); $("#toast-text").textContent = text;
+  const b = $("#toast-btn"); b.hidden = !action; b.textContent = action || "";
+  b.onclick = action ? () => { t.hidden = true; fn(); } : null;
+  t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, action ? 6000 : 3500);
+}
+
+function init() {
+  $("#plan-picker").addEventListener("click", planPicker);
+  // Nur schließen, wenn die Berührung auf dem Hintergrund begann – sonst würde der Klick,
+  // den der Browser nach dem Antippen eines Raums erzeugt, das Sheet sofort wieder schließen.
+  let backdropArmed = false;
+  $("#backdrop").addEventListener("pointerdown", () => { backdropArmed = true; });
+  $("#backdrop").addEventListener("click", () => { if (backdropArmed) closeSheet(); backdropArmed = false; });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && S.sheet) closeSheet(); });
+  for (const b of document.querySelectorAll(".tabbar button")) b.addEventListener("click", () => setView(b.dataset.view));
+  const mid = () => { const r = svgEl().getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; };
+  $("#zoom-in").addEventListener("click", () => zoomAt(1.4, ...mid()));
+  $("#zoom-out").addEventListener("click", () => zoomAt(1 / 1.4, ...mid()));
+  $("#zoom-fit").addEventListener("click", fitView);
+  $("#only-mine").checked = !!ls("mine");
+  $("#only-mine").addEventListener("change", (e) => { ls("mine", e.target.checked); renderPlan(false); });
+  $("#edit-toggle").addEventListener("click", () => { S.edit = !S.edit; S.sel = null; renderPlan(false); });
+  $("#row-btn").addEventListener("click", rowSheet);
+  $("#new-plan-btn").addEventListener("click", () => planForm());
+  $("#search").addEventListener("input", renderList);
+  $("#list-all").addEventListener("change", renderList);
+  $("#dates-all").addEventListener("change", renderDates);
+  const s = svgEl();
+  s.addEventListener("pointerdown", onDown); s.addEventListener("pointermove", onMove);
+  s.addEventListener("pointerup", onUp); s.addEventListener("pointercancel", (e) => { cancelEditGesture(); onUp(e); });
+  s.addEventListener("wheel", (e) => { e.preventDefault(); zoomAt(e.deltaY < 0 ? 1.15 : 1 / 1.15, e.clientX, e.clientY); }, { passive: false });
+  let lw = window.innerWidth;
+  window.addEventListener("resize", () => { if (window.innerWidth !== lw && S.view === "plan") fitView(); lw = window.innerWidth; });
+  window.addEventListener("online", flushQueue);
+  setInterval(() => { if (!document.hidden) { flushQueue(); renderBadges(); } }, 20000);
+  window.addEventListener("hashchange", () => setView(VIEWS[location.hash.slice(1)] || "plan", true));
+  buildChips();
+  setView(VIEWS[location.hash.slice(1)] || "plan", true);
+  boot();
+}
+init();
+</script>
