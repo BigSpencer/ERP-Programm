@@ -102,6 +102,13 @@ main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .area.overdue .box { stroke: var(--danger); stroke-width: .14; stroke-dasharray: .35 .2; }
 .area.sel .box { stroke: var(--ink); stroke-width: .2; }
 .area.moving { opacity: .75; }
+.spot { stroke-width: .06; }
+.spot.sp-open { fill: var(--plan); stroke: var(--st-open-b); }
+.spot.sp-done { fill: var(--st-done-b); stroke: var(--st-done-b); }
+.spot.sp-defect { fill: var(--st-clarify-b); stroke: var(--st-clarify-b); }
+.spot.sp-absent { fill: var(--st-partial-b); stroke: var(--st-partial-b); }
+.spot.sel { stroke: var(--ink); stroke-width: .12; }
+.area.moving .spot, .spot.moving { opacity: .7; }
 .rubber { fill: color-mix(in srgb, var(--accent) 18%, transparent); stroke: var(--accent); stroke-width: .08; stroke-dasharray: .3 .15; }
 .rubber-label { fill: var(--accent); font-family: var(--f-data); }
 .f-open { fill: var(--st-open-f); stroke: var(--st-open-b); } .k-open { fill: var(--st-open-b); }
@@ -192,6 +199,24 @@ main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .err { color: var(--danger); font-size: 14px; min-height: 1.2em; margin: 0; }
 details.hist summary { font-weight: 600; min-height: 34px; display: flex; align-items: center; }
 .hist-item { font-size: 14px; padding: 8px 0; border-top: 1px solid var(--line); display: grid; gap: 2px; }
+.spots { display: grid; gap: 8px; padding: 12px; border-radius: 14px; background: var(--bg); border: 1px solid var(--line); }
+.spots-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.spot-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.spot-row { display: flex; align-items: stretch; gap: 6px; }
+.spot-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; text-align: left; padding: 8px 10px; min-height: 52px;
+  border-radius: 10px; border: 1px solid var(--line); background: var(--surface); }
+.spot-ico { flex: none; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-size: 15px; font-weight: 700; border: 2px solid; }
+.si-open { border-color: var(--st-open-b); color: var(--st-open-b); }
+.si-done { background: var(--st-done-b); border-color: var(--st-done-b); color: var(--surface); }
+.si-defect { background: var(--st-clarify-b); border-color: var(--st-clarify-b); color: var(--surface); }
+.si-absent { background: var(--st-partial-b); border-color: var(--st-partial-b); color: var(--surface); }
+.spot-txt { min-width: 0; display: grid; }
+.spot-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.spot-sub { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sr-defect .spot-sub { color: var(--danger); }
+.spot-quick { flex: none; width: 52px; border-radius: 10px; border: 2px solid var(--st-done-b); background: var(--st-done-f); color: var(--ink); font-size: 20px; font-weight: 700; }
+.spot-quick:disabled { opacity: .35; }
+.back { justify-self: start; background: none; border: 0; padding: 4px 0; color: var(--accent); font-weight: 600; min-height: 36px; }
 .plan-opt { width: 100%; text-align: left; background: none; border: 0; border-top: 1px solid var(--line); padding: 12px 2px; display: grid; gap: 6px; }
 .plan-opt[aria-current="true"] strong { color: var(--accent); }
 .people { display: grid; gap: 4px; }
@@ -291,6 +316,18 @@ const STATUS = {
   done: { label: "Erledigt", icon: "✔" },
 };
 const ORDER = ["open", "partial", "clarify", "appointment", "done"];
+// Status eines einzelnen Prüfplatzes (Arbeitsplatz, Drucker, Teeküche …)
+const SPOT = {
+  open: { label: "Offen", icon: "○" },
+  done: { label: "Geprüft", icon: "✔" },
+  defect: { label: "Mangel", icon: "✖" },
+  absent: { label: "Nicht zugänglich", icon: "⊘" },
+};
+const SPOT_ORDER = ["open", "absent", "defect", "done"];
+const SPOT_NAMES = ["Arbeitsplatz", "Drucker", "Kopierer", "Teeküche", "Besprechungstisch", "Server-Rack", "Steckdosenleiste", "Ladestation"];
+const DEFECT_QUICK = ["Isolation beschädigt", "Stecker defekt", "Zuleitung gequetscht", "Prüfung nicht bestanden", "Gehäuse beschädigt"];
+const ABSENT_QUICK = ["Gerät nicht auffindbar", "Gerät in Benutzung", "Arbeitsplatz verschlossen", "Mitarbeiter abwesend"];
+const SPOT_COLORS = { open: "open", done: "done", defect: "clarify", absent: "partial" };
 const CLARIFY_QUICK = ["Raum verschlossen", "Mitarbeiter abwesend", "Gerät in Benutzung / nicht abschaltbar",
   "Zugang nur mit Begleitung", "Gerät defekt – Rücksprache"];
 const GRID = 0.5, MIN = 0.5, HIST_MAX = 25;
@@ -354,6 +391,11 @@ function sampleData() {
     status, progress: status === "done" ? 100 : 0, date: null, note: "", notes: "", devices: 8, inspector: null, by: null, at: null, rev: 1, hist: [], ...extra });
   ["done", "done", "partial", "appointment", "open", "open"].forEach((s, i) => mk(`Büro 1.${i + 1}`, i * 6, 0, 6, 6, s,
     s === "partial" ? { progress: 60, note: "Kaffeeküche noch offen" } : s === "appointment" ? { date: iso(3), note: "Mitarbeiter im Urlaub" } : {}));
+  const sp = (names, states = []) => names.map((n, i) => ({ id: "vs" + a.length + "-" + i, name: n, devices: n.startsWith("Arbeitsplatz") ? 3 : 1,
+    status: states[i] || "open", note: states[i] === "defect" ? "Zuleitung gequetscht" : "", by: null, at: null }));
+  a[2].spots = sp(["Arbeitsplatz 1", "Arbeitsplatz 2", "Arbeitsplatz 3", "Drucker", "Teeküche"], ["done", "done", "defect"]);
+  a[2].progress = 60;
+  a[4].spots = sp(["Arbeitsplatz 1", "Arbeitsplatz 2", "Kopierer"]);
   mk("Flur", 0, 6, 36, 4, "open", { devices: 4 });
   ["done", "clarify", "appointment", "open"].forEach((s, i) => mk(`Büro 1.${i + 11}`, i * 6, 10, 6, 6, s,
     s === "clarify" ? { note: "Raum verschlossen, Schlüssel fehlt" } : s === "appointment" ? { date: iso(-2) } : {}));
@@ -458,10 +500,64 @@ function statusPatch(cur, v) {
 }
 const mayChangeData = (d) => S.isEditor || !d.inspector || d.inspector === S.me.id;
 
-// ---------- Offline-Warteschlange ----------
-const queue = () => ls("queue") || [];
+// ---------- Prüfplätze ----------
+/** Zählt die Prüfplätze eines Raums. Geprüft = ohne oder mit Mangel geprüft. */
+function spotStats(a) {
+  const s = a.spots || [];
+  const c = { total: s.length, open: 0, done: 0, defect: 0, absent: 0, devices: 0 };
+  for (const x of s) { c[x.status] = (c[x.status] || 0) + 1; c.devices += x.devices || 0; }
+  c.checked = c.done + c.defect;
+  c.pct = c.total ? Math.round(c.checked / c.total * 100) : 0;
+  return c;
+}
+/** Fortschritt und – solange der Raum nicht auf Termin/Klärung steht – Status aus den Plätzen ableiten. */
+function deriveFromSpots(cur, spots) {
+  const st = spotStats({ spots });
+  const patch = { spots };
+  if (!st.total) return patch;
+  patch.progress = st.pct;
+  if (["open", "partial", "done"].includes(cur.status)) {
+    const next = st.pct === 100 ? "done" : st.pct > 0 ? "partial" : "open";
+    if (next !== cur.status) {
+      const at = new Date().toISOString();
+      patch.status = next; patch.at = at; patch.by = S.me.id; patch.date = null;
+      if (next !== "partial" || cur.status !== "partial") patch.note = next === "done" ? "" : (cur.note || "");
+      patch.hist = [{ status: next, progress: st.pct, date: null, note: "aus Prüfplätzen", by: S.me.id, at }, ...(cur.hist || [])].slice(0, HIST_MAX);
+    }
+  }
+  if (!cur.inspector && st.checked) patch.inspector = S.me.id;
+  return patch;
+}
+function spotStatusPatch(cur, op) {
+  if (!mayChangeData(cur)) throw new Conflict(`Dieser Bereich ist ${nameOf(cur.inspector)} zugewiesen.`);
+  const spots = (cur.spots || []).map((x) => ({ ...x }));
+  const s = spots.find((x) => x.id === op.spotId);
+  if (!s) throw new Conflict("Der Prüfplatz wurde inzwischen gelöscht.");
+  Object.assign(s, { status: op.status, note: (op.note || "").trim(), by: S.me.id, at: new Date().toISOString() });
+  return deriveFromSpots(cur, spots);
+}
+function allSpotsPatch(cur) {
+  if (!mayChangeData(cur)) throw new Conflict(`Dieser Bereich ist ${nameOf(cur.inspector)} zugewiesen.`);
+  const at = new Date().toISOString();
+  const spots = (cur.spots || []).map((x) => (x.status === "open" || x.status === "absent" ? { ...x, status: "done", note: "", by: S.me.id, at } : { ...x }));
+  return deriveFromSpots(cur, spots);
+}
+/** Wendet vorgemerkte Änderungen der Reihe nach auf einen Raum an. */
+function applyOps(cur, ops) {
+  let state = { ...cur };
+  for (const op of ops) state = { ...state, ...(op.kind === "spot" ? spotStatusPatch(state, op)
+    : op.kind === "spotsAll" ? allSpotsPatch(state) : statusPatch(state, op.values)) };
+  const { id, rev, ...rest } = state;
+  return rest;
+}
+
+// ---------- Offline-Warteschlange (je Raum eine Liste von Änderungen) ----------
+const queue = () => (ls("queue") || []).map((q) => (q.ops ? q : { ...q, ops: [{ kind: "status", values: q.values }] }));
 function applyQueueLocally() {
-  for (const q of queue()) { const a = S.areas.find((x) => x.id === q.id); if (a) Object.assign(a, q.local); }
+  for (const q of queue()) {
+    const a = S.areas.find((x) => x.id === q.id);
+    if (a) try { Object.assign(a, applyOps(a, q.ops)); } catch { /* wird beim Übertragen gemeldet */ }
+  }
 }
 let flushing = false;
 async function flushQueue() {
@@ -470,7 +566,7 @@ async function flushQueue() {
   flushing = true;
   const left = [];
   for (const item of q) {
-    try { await guarded(item.id, item.rev, (cur) => statusPatch(cur, item.values)); }
+    try { await guarded(item.id, item.rev, (cur) => applyOps(cur, item.ops)); }
     catch (e) {
       if (e?.code === "unavailable" || e?.code === "resource_exhausted") left.push(item);
       else toast(`„${item.name}“ nicht übertragen: ${e.message || "Fehler"}`);
@@ -481,30 +577,51 @@ async function flushQueue() {
   updateBanner();
 }
 
-async function setStatus(a, values, { silent = false } = {}) {
-  if (S.preview) { // Vorschau: nur lokal
-    Object.assign(a, statusPatch(a, values), { rev: (a.rev || 0) + 1 });
-    render(); if (!silent) toast(`Gespeichert: ${stText(a)} (Vorschau)`); return true;
+/** Speichert eine Statusänderung (Raum oder Prüfplatz); ohne Verbindung wird sie vorgemerkt. */
+async function commit(a, op, { silent = false, msg = null } = {}) {
+  if (S.preview) {
+    Object.assign(a, applyOps(a, [op]), { rev: (a.rev || 0) + 1 });
+    render(); if (!silent && msg) toast(`${msg} (Vorschau)`); return true;
   }
   try {
-    const res = await withRetry(() => guarded(a.id, a.rev, (cur) => statusPatch(cur, values)));
+    const res = await withRetry(() => guarded(a.id, a.rev, (cur) => applyOps(cur, [op])));
     Object.assign(a, res); render();
-    if (!silent && values.status !== "done" && values.status !== "open") toast(`Gespeichert: ${stText(a)}`);
+    if (!silent && msg) toast(msg);
     return true;
   } catch (e) {
     if (e instanceof Conflict) { toast(e.message); return false; }
     if (e?.code === "unavailable") {
-      const local = { ...statusPatch(a, values) };
-      const q = queue().filter((x) => x.id !== a.id);
-      const prevRev = queue().find((x) => x.id === a.id)?.rev ?? a.rev;
-      q.push({ id: a.id, name: a.name, rev: prevRev, values, local });
-      ls("queue", q); Object.assign(a, local); render(); updateBanner();
+      const q = queue();
+      const item = q.find((x) => x.id === a.id);
+      if (item) item.ops.push(op); else q.push({ id: a.id, name: a.name, rev: a.rev, ops: [op] });
+      ls("queue", q); Object.assign(a, applyOps(a, [op])); render(); updateBanner();
       toast("Ohne Verbindung vorgemerkt – wird automatisch übertragen.");
       return true;
     }
     if (e?.code === "invalid_argument") { S.canWrite = false; toast("Sie können hier nur ansehen, nicht ändern."); render(); return false; }
     if (e?.code === "quota_exceeded") { toast("Der Speicher ist voll. Bitte alte Grundrisse löschen."); return false; }
     toast("Speichern fehlgeschlagen. Bitte erneut versuchen."); return false;
+  }
+}
+function setStatus(a, values, { silent = false } = {}) {
+  const label = { ...a, status: values.status, progress: values.progress, date: values.date };
+  const msg = values.status !== "done" && values.status !== "open" ? `Gespeichert: ${stText(label)}` : null;
+  return commit(a, { kind: "status", values }, { silent, msg });
+}
+function setSpotStatus(a, spot, status, note = "", opts = {}) {
+  return commit(a, { kind: "spot", spotId: spot.id, status, note }, { msg: opts.silent ? null : `${spot.name}: ${SPOT[status].label}`, ...opts });
+}
+/** Prüfplätze anlegen, umbenennen, verschieben, löschen (nur mit Verbindung). */
+async function editSpots(a, mutate, okMsg) {
+  const run = (cur) => { const spots = (cur.spots || []).map((x) => ({ ...x })); mutate(spots); return deriveFromSpots(cur, spots); };
+  if (S.preview) { Object.assign(a, run(a), { rev: (a.rev || 0) + 1 }); render(); okMsg && toast(okMsg + " (Vorschau)"); return true; }
+  if (queue().some((x) => x.id === a.id)) { toast("Für diesen Raum sind noch Änderungen vorgemerkt. Bitte warten, bis sie übertragen sind."); return false; }
+  try {
+    const res = await withRetry(() => guarded(a.id, a.rev, run));
+    Object.assign(a, res); render(); okMsg && toast(okMsg); return true;
+  } catch (e) {
+    toast(e instanceof Conflict ? e.message : e?.code === "unavailable" ? "Prüfplätze anlegen oder ändern geht nur mit Verbindung." : "Speichern fehlgeschlagen. Bitte erneut versuchen.");
+    return false;
   }
 }
 
@@ -520,7 +637,7 @@ async function writeArea(id, data, rev) {
 function newId(prefix) { return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
 function newArea(planId, name, x, y, w, h, inspector = null) {
   return { plan: planId, name, x, y, w, h, status: "open", progress: 0, date: null, note: "", notes: "", devices: 0,
-    inspector, by: null, at: null, rev: 1, hist: [] };
+    inspector, by: null, at: null, rev: 1, hist: [], spots: [] };
 }
 function clampGeom(p, x, y, w, h) {
   w = Math.max(MIN, Math.min(p.w, snap(w))); h = Math.max(MIN, Math.min(p.h, snap(h)));
@@ -546,7 +663,11 @@ function render(fit = false) {
   if (S.view === "list") renderList();
   if (S.view === "dates") renderDates();
   if (S.view === "more") renderMore();
-  if (S.sheet?.kind === "area" && !S.sheet.busy) { const a = S.areas.find((x) => x.id === S.sheet.id); if (a) areaSheet(a); }
+  if (S.sheet && !S.sheet.busy && (S.sheet.kind === "area" || S.sheet.kind === "spot")) {
+    const a = S.areas.find((x) => x.id === S.sheet.id);
+    const s = a && S.sheet.spot ? (a.spots || []).find((x) => x.id === S.sheet.spot) : null;
+    if (a && S.sheet.kind === "area") areaSheet(a); else if (a && s) spotSheet(a, s);
+  }
 }
 
 function renderSummary() {
@@ -555,12 +676,14 @@ function renderSummary() {
   const c = Object.fromEntries(ORDER.map((k) => [k, 0])); list.forEach((a) => c[a.status]++);
   const pct = list.length ? Math.round(list.reduce((s, a) => s + (a.progress || 0), 0) / list.length) : 0;
   const od = list.filter(overdue).length;
+  const defects = list.reduce((n, a) => n + spotStats(a).defect, 0);
   box.replaceChildren(
     el("div", { class: "sum-row" }, el("span", {}, el("strong", { class: "mono" }, `${pct} %`), ` geprüft · ${list.length} Bereiche`),
       el("span", { class: "muted" }, p.location || "")),
     el("div", { class: "bar", role: "progressbar", "aria-valuenow": pct, "aria-valuemin": 0, "aria-valuemax": 100 }, el("span", { style: { width: pct + "%" } })),
     el("div", { class: "counts" }, ORDER.filter((k) => c[k]).map((k) => el("span", { class: "count", style: { background: cssVar(k), borderColor: cssBorder(k) } },
-      `${STATUS[k].icon} ${STATUS[k].label} ${c[k]}`)), od ? el("span", { class: "count", style: { borderColor: "var(--danger)", color: "var(--danger)" } }, `⚠ ${od} überfällig`) : null));
+      `${STATUS[k].icon} ${STATUS[k].label} ${c[k]}`)), od ? el("span", { class: "count", style: { borderColor: "var(--danger)", color: "var(--danger)" } }, `⚠ ${od} überfällig`) : null,
+      defects ? el("span", { class: "count", style: { borderColor: "var(--danger)", color: "var(--danger)" } }, `✖ ${defects} Mangel`) : null));
 }
 
 function renderBadges() {
@@ -584,6 +707,30 @@ function fitView() {
 }
 function applyVb() { if (vb) svgEl().setAttribute("viewBox", `${vb.x} ${vb.y} ${vb.w} ${vb.h}`); }
 const trunc = (t, n) => (t.length <= n ? t : t.slice(0, Math.max(1, n - 1)) + "…");
+
+/** Lage der Prüfplätze: gespeicherte Position, sonst automatisch im Raster unterhalb der Beschriftung. */
+function spotPositions(a, textBottom) {
+  const spots = a.spots || []; if (!spots.length) return [];
+  const r = Math.max(.16, Math.min(.32, Math.min(a.w, a.h) / 10));
+  const x0 = a.x + r + .15, x1 = a.x + a.w - r - .15;
+  const y0 = Math.min(Math.max(textBottom + r, a.y + r + .15), a.y + a.h - r - .2), y1 = a.y + a.h - r - .2;
+  const auto = spots.filter((s) => s.rx == null || s.ry == null);
+  const w = Math.max(.01, x1 - x0), h = Math.max(.01, y1 - y0);
+  const cols = Math.max(1, Math.min(auto.length, Math.round(Math.sqrt(auto.length * w / h)) || 1));
+  const rows = Math.ceil(auto.length / cols);
+  const out = [];
+  let i = 0;
+  for (const s of spots) {
+    if (s.rx != null && s.ry != null) {   // relativ zur linken oberen Raumecke gespeichert
+      out.push([s, { x: a.x + Math.min(Math.max(s.rx, r), a.w - r), y: a.y + Math.min(Math.max(s.ry, r), a.h - r), r }]);
+    } else {
+      const cx = cols === 1 ? (x0 + x1) / 2 : x0 + (i % cols) * w / (cols - 1);
+      const cy = rows === 1 ? (y0 + y1) / 2 : y0 + Math.floor(i / cols) * h / (rows - 1);
+      out.push([s, { x: cx, y: cy, r }]); i++;
+    }
+  }
+  return out;
+}
 
 function renderPlan(fit) {
   const s = svgEl(), p = curPlan();
@@ -620,12 +767,23 @@ function renderPlan(fit) {
     const t1 = sv("text", { class: "t1", x: a.x + .18, y: a.y + .15 + fs, "font-size": fs });
     t1.textContent = trunc(`${STATUS[a.status].icon} ${a.name}`, Math.max(3, Math.floor((a.w - .3) / (fs * .56))));
     grp.append(t1);
-    const lines = [a.status !== "open" ? stText(a) : "", a.inspector ? nameOf(a.inspector) : ""].filter(Boolean);
+    const sp = spotStats(a);
+    const stLine = sp.total && ["open", "partial", "done"].includes(a.status)
+      ? `${sp.checked}/${sp.total} Plätze${sp.defect ? ` · ${sp.defect} Mangel` : ""}` : (a.status !== "open" ? stText(a) : "");
+    const lines = [stLine, a.inspector ? nameOf(a.inspector) : ""].filter(Boolean);
     const fs2 = fs * .78, room = Math.floor((a.h - fs - .4) / (fs2 * 1.2));
-    lines.slice(0, Math.max(0, room)).forEach((line, i) => {
+    const shown = lines.slice(0, Math.max(0, Math.min(2, room)));
+    shown.forEach((line, i) => {
       const t = sv("text", { class: "t2", x: a.x + .18, y: a.y + .2 + fs + (i + 1) * fs2 * 1.25, "font-size": fs2 });
       t.textContent = trunc(line, Math.floor((a.w - .3) / (fs2 * .56))); grp.append(t);
     });
+    const textBottom = a.y + .35 + fs + shown.length * fs2 * 1.25;
+    for (const [spot, pos] of spotPositions(a, textBottom)) {
+      const c = sv("circle", { class: `spot sp-${spot.status}${spot.id === S.selSpot ? " sel" : ""}`, cx: pos.x, cy: pos.y, r: pos.r,
+        "data-spot": spot.id });
+      const tt = sv("title"); tt.textContent = `${spot.name}: ${SPOT[spot.status].label}`; c.append(tt);
+      grp.append(c);
+    }
     s.append(grp);
   }
   if (fit || !vb) requestAnimationFrame(fitView); else applyVb();
@@ -657,8 +815,10 @@ function onDown(e) {
   ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (ptrs.size === 1) {
     const areaEl = e.target.closest?.(".area");
-    G = { tap: true, t: Date.now(), x0: e.clientX, y0: e.clientY, last: { x: e.clientX, y: e.clientY }, areaEl,
-      start: toPlan(e.clientX, e.clientY), mode: S.edit ? (areaEl ? "move" : "draw") : "pan" };
+    const start = toPlan(e.clientX, e.clientY);
+    const spotEl = areaEl ? hitSpot(areaEl, start) : null;
+    G = { tap: true, t: Date.now(), x0: e.clientX, y0: e.clientY, last: { x: e.clientX, y: e.clientY }, areaEl, spotEl,
+      start, mode: S.edit ? (spotEl ? "spotmove" : areaEl ? "move" : "draw") : "pan" };
   } else { cancelEditGesture(); G = { tap: false, mode: "pinch", pin: pinch() }; }
 }
 function onMove(e) {
@@ -683,6 +843,12 @@ function onMove(e) {
     for (const [k, v] of Object.entries({ x: G.rect.x, y: G.rect.y, width: G.rect.w, height: G.rect.h })) G.rubber.setAttribute(k, v);
     G.rubberLabel.setAttribute("x", G.rect.x + .1); G.rubberLabel.setAttribute("y", G.rect.y - .15);
     G.rubberLabel.textContent = `${fmtM(G.rect.w)} × ${fmtM(G.rect.h)} m`;
+  } else if (G.mode === "spotmove" && G.spotEl) {
+    const a = S.areas.find((x) => x.id === G.areaEl.dataset.id); if (!a) return;
+    const r = Number(G.spotEl.getAttribute("r"));
+    const rx = Math.min(Math.max(r, Math.round((q.x - a.x) * 4) / 4), a.w - r), ry = Math.min(Math.max(r, Math.round((q.y - a.y) * 4) / 4), a.h - r);
+    G.spotTo = { rx, ry }; G.spotEl.classList.add("moving");
+    G.spotEl.setAttribute("cx", a.x + rx); G.spotEl.setAttribute("cy", a.y + ry);
   } else if (G.mode === "move" && G.areaEl) {
     const a = S.areas.find((x) => x.id === G.areaEl.dataset.id);
     if (!a || !mayEditArea(a)) { G.mode = "pan"; return; }
@@ -700,7 +866,18 @@ function onUp(e) {
   else if (ptrs.size === 1) { const [p] = ptrs.values(); G = { tap: false, mode: "pan", last: { ...p }, x0: 0, y0: 0 }; return; }
   if (!g || g.mode === "pinch") return;
   if (g.tap && Date.now() - g.t < 650) {
-    if (g.areaEl) { const id = g.areaEl.dataset.id; S.edit ? editAreaSheet(id) : openArea(id); }
+    // Einen Takt später öffnen: so erreicht das Ende der Berührung noch den unveränderten Grundriss
+    // und der Nachklick des Browsers wird dort abgefangen, statt im neuen Fenster zu landen.
+    const areaId = g.areaEl?.dataset.id, spotId = g.spotEl?.dataset.spot;
+    setTimeout(() => {
+      if (spotId) openSpot(areaId, spotId, S.edit);
+      else if (areaId) S.edit ? editAreaSheet(areaId) : openArea(areaId);
+    }, 0);
+    return;
+  }
+  if (g.mode === "spotmove" && g.spotTo) {
+    const a = S.areas.find((x) => x.id === g.areaEl.dataset.id), sid = g.spotEl.dataset.spot, to = g.spotTo;
+    if (a) editSpots(a, (spots) => { const s = spots.find((x) => x.id === sid); if (s) Object.assign(s, to); }).then(() => render());
     return;
   }
   if (g.mode === "draw" && g.rect) {
@@ -717,19 +894,36 @@ function onUp(e) {
   }
 }
 const mayEditArea = (a) => S.canWrite;
+/** Nächstgelegener Prüfplatz-Punkt im Umkreis von ca. 16 Bildpunkten (die Punkte sind oft winzig). */
+function hitSpot(areaEl, pt) {
+  const a = S.areas.find((x) => x.id === areaEl.dataset.id);
+  if (!a || a.w / pt.sc < 110) return null;   // Raum auf dem Display zu klein: Antippen öffnet den Raum
+  let best = null, bestD = Infinity;
+  for (const c of areaEl.querySelectorAll(".spot")) {
+    const d = Math.hypot(Number(c.getAttribute("cx")) - pt.x, Number(c.getAttribute("cy")) - pt.y);
+    const reach = Math.max(Number(c.getAttribute("r")) * 1.3, 16 * pt.sc);
+    if (d <= reach && d < bestD) { best = c; bestD = d; }
+  }
+  return best;
+}
 
 // ======================================================================
 // Bottom-Sheet
 // ======================================================================
 function openSheet(kind, content, extra = {}) {
   const sh = $("#sheet");
+  const same = S.sheet && S.sheet.kind === kind && S.sheet.id === extra.id && S.sheet.spot === extra.spot && !sh.hidden;
+  const scroll = same ? sh.scrollTop : 0;
+  const openDetails = same ? [...sh.querySelectorAll("details[open]")].map((d) => d.dataset.key) : [];
   sh.replaceChildren(el("div", { class: "grabber", "aria-hidden": "true" }), content);
+  for (const d of sh.querySelectorAll("details")) if (openDetails.includes(d.dataset.key)) d.open = true;
   sh.hidden = false; $("#backdrop").hidden = false;
+  sh.scrollTop = scroll;
   S.sheet = { kind, ...extra };
 }
 function closeSheet() {
   $("#sheet").hidden = true; $("#backdrop").hidden = true; S.sheet = null;
-  if (S.sel) { S.sel = null; renderPlan(false); }
+  if (S.sel || S.selSpot) { S.sel = null; S.selSpot = null; renderPlan(false); }
 }
 function openArea(id) {
   const a = S.areas.find((x) => x.id === id); if (!a) return;
@@ -743,14 +937,15 @@ function areaSheet(a) {
   f("Prüfer", a.inspector ? nameOf(a.inspector) : "nicht zugewiesen");
   if (a.status === "appointment") f("Termin", fmtDate(a.date) + (overdue(a) ? " – überfällig" : ""));
   f("Bemerkung", a.note); f("Hinweise", a.notes);
-  f("Prüflinge", a.devices ? `ca. ${a.devices}` : "");
+  const sd = spotStats(a).devices;
+  f("Prüflinge", sd ? `${sd} (laut Prüfplätzen)` : a.devices ? `ca. ${a.devices}` : "");
   f("Geändert", a.at ? `${a.by ? nameOf(a.by) : "—"}, ${fmtStamp(a.at)}` : "");
   const ok = mayChange(a);
   const act = (k, text, cls = "") => el("button", { type: "button", class: `act ${cls}`, disabled: !ok,
     style: { background: cssVar(k), borderColor: cssBorder(k) },
     onclick: () => (k === "done" || k === "open") ? quick(a, k) : statusForm(a, k) }, text);
   const plan = S.plans.find((p) => p.id === a.plan);
-  const hist = el("details", { class: "hist" }, el("summary", {}, `Verlauf (${(a.hist || []).length})`),
+  const hist = el("details", { class: "hist", "data-key": "hist" }, el("summary", {}, `Verlauf (${(a.hist || []).length})`),
     ...((a.hist || []).length ? a.hist.map((h) => el("div", { class: "hist-item" },
       el("div", {}, el("strong", {}, `${STATUS[h.status]?.icon || ""} ${STATUS[h.status]?.label || h.status}`),
         h.status === "partial" ? ` (${h.progress} %)` : "", h.date ? ` am ${fmtDate(h.date)}` : ""),
@@ -764,9 +959,170 @@ function areaSheet(a) {
     !S.canWrite ? el("div", { class: "notice" }, "Sie haben nur Lesezugriff auf diese Prüfplanung.") :
       !ok ? el("div", { class: "notice" }, `Dieser Bereich ist ${nameOf(a.inspector)} zugewiesen.`) : null,
     ok && !a.inspector && S.me.id ? el("button", { type: "button", class: "btn block", onclick: () => claim(a) }, "Bereich übernehmen") : null,
+    spotSection(a, ok),
+    el("div", { class: "lbl muted", style: { fontSize: "14px" } }, (a.spots || []).length ? "Status des ganzen Raums" : "Status"),
     el("div", { class: "actions" }, act("done", "✔ Erledigt", "wide"), act("partial", "◑ Teilweise"), act("appointment", "◷ Termin"),
       act("clarify", "? Klärung"), act("open", "○ Offen")),
     hist), { id: a.id });
+}
+
+// ---------- Prüfplätze: Liste im Raum ----------
+function spotSection(a, ok) {
+  const spots = [...(a.spots || [])].sort((x, y) => natural(x.name, y.name));
+  const st = spotStats(a);
+  const box = el("section", { class: "spots", "aria-label": "Prüfplätze" });
+  box.append(el("div", { class: "spots-head" },
+    el("strong", {}, "Prüfplätze"),
+    el("span", { class: "muted mono" }, st.total ? `${st.checked}/${st.total} geprüft` : "noch keine")));
+  if (st.total) {
+    box.append(el("div", { class: "bar" }, el("span", { style: { width: st.pct + "%" } })));
+    const extra = [st.defect ? `${st.defect} mit Mangel` : "", st.absent ? `${st.absent} nicht zugänglich` : "", st.devices ? `${st.devices} Geräte` : ""].filter(Boolean);
+    if (extra.length) box.append(el("div", { class: "muted", style: { fontSize: "14px" } }, extra.join(" · ")));
+    const ul = el("ul", { class: "spot-list" });
+    for (const s of spots) {
+      const quickOk = ok && s.status !== "done";
+      ul.append(el("li", { class: `spot-row sr-${s.status}` },
+        el("button", { type: "button", class: "spot-main", onclick: () => openSpot(a.id, s.id, false) },
+          el("span", { class: `spot-ico si-${s.status}`, "aria-hidden": "true" }, SPOT[s.status].icon),
+          el("span", { class: "spot-txt" }, el("span", { class: "spot-name" }, s.name),
+            el("span", { class: "spot-sub" }, [SPOT[s.status].label, s.devices ? `${s.devices} Gerät${s.devices > 1 ? "e" : ""}` : "", s.note].filter(Boolean).join(" · ")))),
+        el("button", { type: "button", class: "spot-quick", disabled: !quickOk, "aria-label": `${s.name} als geprüft markieren`,
+          onclick: () => quickSpot(a, s) }, "✔")));
+    }
+    box.append(ul);
+  } else {
+    box.append(el("p", { class: "muted", style: { margin: 0, fontSize: "14px" } },
+      "Prüfplätze sind die Stellen im Raum, an denen geprüft wird – z. B. Arbeitsplätze, Drucker, Teeküche. Der Fortschritt des Raums ergibt sich dann automatisch."));
+  }
+  const row = el("div", { class: "btn-row" });
+  if (ok) row.append(el("button", { type: "button", class: "btn", onclick: () => addSpotSheet(a) }, "＋ Prüfplatz"));
+  if (ok && st.open + st.absent > 0 && st.total > 1) row.append(el("button", { type: "button", class: "btn", onclick: () => allSpotsDone(a) }, `Übrige ${st.open + st.absent} geprüft`));
+  if (row.children.length) box.append(row);
+  return box;
+}
+function openSpot(areaId, spotId, edit) {
+  const a = S.areas.find((x) => x.id === areaId); if (!a) return;
+  const s = (a.spots || []).find((x) => x.id === spotId); if (!s) return;
+  S.sel = areaId; S.selSpot = spotId; renderPlan(false);
+  edit && S.canWrite ? editSpotSheet(a, s) : spotSheet(a, s);
+}
+async function quickSpot(a, s) {
+  const before = { status: s.status, note: s.note || "" };
+  if (!(await setSpotStatus(a, s, "done", "", { silent: true }))) return;
+  toast(`${s.name}: geprüft`, "Rückgängig", () => {
+    const cur = S.areas.find((x) => x.id === a.id) || a;
+    setSpotStatus(cur, s, before.status, before.note, { silent: true });
+  });
+}
+async function allSpotsDone(a) {
+  const todo = (a.spots || []).filter((s) => s.status === "open" || s.status === "absent");
+  if (await commit(a, { kind: "spotsAll" }, { silent: true })) toast(`${todo.length} Prüfplätze als geprüft markiert`);
+}
+
+// ---------- Prüfplätze: Einzelansicht ----------
+function spotSheet(a, s) {
+  const ok = mayChange(a);
+  const facts = el("dl", { class: "facts" });
+  const f = (k, v) => v && facts.append(el("dt", {}, k), el("dd", {}, v));
+  f("Geräte", s.devices ? String(s.devices) : ""); f("Bemerkung", s.note);
+  f("Geändert", s.at ? `${s.by ? nameOf(s.by) : "—"}, ${fmtStamp(s.at)}` : "");
+  const c = SPOT_COLORS;
+  const act = (k, text, cls = "") => el("button", { type: "button", class: `act ${cls}`, disabled: !ok,
+    style: { background: cssVar(c[k]), borderColor: cssBorder(c[k]) },
+    onclick: async () => {
+      if (k === "defect" || k === "absent") return spotNoteForm(a, s, k);
+      if (k === "done") { await quickSpot(a, s); } else await setSpotStatus(a, s, k, "");
+      backToRoom(a.id);
+    } }, text);
+  openSheet("spot", el("div", { style: { display: "grid", gap: "12px" } },
+    el("button", { type: "button", class: "back", onclick: () => backToRoom(a.id) }, `‹ ${a.name}`),
+    el("h2", { id: "sheet-title" }, s.name),
+    el("span", { class: "st-pill", style: { background: cssVar(c[s.status]), borderColor: cssBorder(c[s.status]) } }, `${SPOT[s.status].icon} ${SPOT[s.status].label}`),
+    facts,
+    !ok && S.canWrite ? el("div", { class: "notice" }, `Dieser Raum ist ${nameOf(a.inspector)} zugewiesen.`) : null,
+    el("div", { class: "actions" }, act("done", "✔ Geprüft", "wide"), act("defect", "✖ Mangel"), act("absent", "⊘ Nicht zugänglich"),
+      act("open", "○ Offen", "wide")),
+    S.canWrite ? el("button", { type: "button", class: "btn block", onclick: () => editSpotSheet(a, s) }, "Prüfplatz bearbeiten") : null),
+    { id: a.id, spot: s.id });
+}
+function backToRoom(areaId) {
+  const a = S.areas.find((x) => x.id === areaId); if (!a) return closeSheet();
+  S.selSpot = null; S.sel = areaId; renderPlan(false); areaSheet(a);
+}
+function spotNoteForm(a, s, key) {
+  const err = el("p", { class: "err", role: "alert" });
+  const note = el("textarea", { id: "sn-note", rows: 3, placeholder: key === "defect" ? "Welcher Mangel?" : "Warum nicht zugänglich?" });
+  note.value = s.status === key ? (s.note || "") : "";
+  note.addEventListener("input", () => { err.textContent = ""; });
+  const chips = (key === "defect" ? DEFECT_QUICK : ABSENT_QUICK).map((q) => el("button", { type: "button", class: "chip",
+    onclick: () => { note.value = note.value ? `${note.value}; ${q}` : q; err.textContent = ""; } }, q));
+  const col = SPOT_COLORS[key];
+  openSheet("spot", el("div", { style: { display: "grid", gap: "12px" } },
+    el("button", { type: "button", class: "back", onclick: () => spotSheet(a, s) }, `‹ ${s.name}`),
+    el("h2", { id: "sheet-title" }, s.name),
+    el("span", { class: "st-pill", style: { background: cssVar(col), borderColor: cssBorder(col) } }, `${SPOT[key].icon} ${SPOT[key].label}`),
+    el("div", { class: "field" }, el("label", { for: "sn-note" }, key === "defect" ? "Mangel *" : "Grund"), note, el("div", { class: "quick" }, chips)),
+    key === "defect" ? el("p", { class: "muted", style: { margin: 0, fontSize: "14px" } }, "Das Gerät ist geprüft und hat einen Mangel – es zählt als geprüft, der Mangel wird im Raum und in der Liste angezeigt.") : null,
+    err,
+    el("div", { class: "btn-row" }, el("button", { type: "button", class: "btn", onclick: () => spotSheet(a, s) }, "Zurück"),
+      el("button", { type: "button", class: "btn primary", onclick: async () => {
+        if (key === "defect" && !note.value.trim()) { err.textContent = "Bitte den Mangel kurz beschreiben."; return; }
+        if (await setSpotStatus(a, s, key, note.value)) backToRoom(a.id);
+      } }, "Speichern"))), { id: a.id, spot: s.id, busy: true });
+  setTimeout(() => note.focus(), 60);
+}
+
+// ---------- Prüfplätze: anlegen und bearbeiten ----------
+function addSpotSheet(a) {
+  const err = el("p", { class: "err", role: "alert" });
+  const name = el("input", { id: "as-name", value: "Arbeitsplatz", autocomplete: "off" });
+  const chips = SPOT_NAMES.map((n) => el("button", { type: "button", class: "chip", onclick: () => { name.value = n; } }, n));
+  openSheet("spot-add", el("div", { style: { display: "grid", gap: "12px" } },
+    el("button", { type: "button", class: "back", onclick: () => backToRoom(a.id) }, `‹ ${a.name}`),
+    el("h2", { id: "sheet-title" }, "Prüfplätze anlegen"),
+    el("div", { class: "field" }, el("label", { for: "as-name" }, "Bezeichnung"), name, el("div", { class: "quick" }, chips)),
+    el("div", { class: "grid2" }, numField("as-count", "Anzahl", 1, 1, 1), numField("as-dev", "Geräte je Platz", 1, 1, 0)),
+    el("p", { class: "muted", style: { margin: 0, fontSize: "14px" } }, "Bei mehreren werden sie durchnummeriert, z. B. Arbeitsplatz 1 bis Arbeitsplatz 4. Die Punkte erscheinen im Raum und lassen sich unter ✎ Bearbeiten an ihre Stelle ziehen."),
+    err,
+    el("div", { class: "btn-row" }, el("button", { type: "button", class: "btn", onclick: () => backToRoom(a.id) }, "Abbrechen"),
+      el("button", { type: "button", class: "btn primary", onclick: async (ev) => {
+        const base = name.value.trim(), n = Math.round(num("as-count")), dev = Math.max(0, Math.round(num("as-dev") || 0));
+        if (!base) { err.textContent = "Bitte eine Bezeichnung eingeben."; return; }
+        if (!(n >= 1 && n <= 50)) { err.textContent = "Anzahl zwischen 1 und 50 angeben."; return; }
+        if ((a.spots || []).length + n > 200) { err.textContent = "Höchstens 200 Prüfplätze je Raum."; return; }
+        ev.target.disabled = true;
+        const ok = await editSpots(a, (spots) => {
+          const esc = base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          const used = spots.map((s) => (s.name.match(new RegExp(`^${esc} (\\d+)$`)) || [])[1]).filter(Boolean).map(Number);
+          let next = used.length ? Math.max(...used) + 1 : 1;
+          const single = n === 1 && !spots.some((s) => s.name === base) && !used.length;
+          for (let i = 0; i < n; i++) spots.push({ id: newId("s"), name: single ? base : `${base} ${next++}`, devices: dev,
+            status: "open", note: "", by: null, at: null });
+        }, n === 1 ? "Prüfplatz angelegt" : `${n} Prüfplätze angelegt`);
+        ev.target.disabled = false;
+        if (ok) backToRoom(a.id);
+      } }, "Anlegen"))), { id: a.id, busy: true });
+}
+function editSpotSheet(a, s) {
+  const err = el("p", { class: "err", role: "alert" });
+  openSheet("spot-edit", el("div", { style: { display: "grid", gap: "12px" } },
+    el("button", { type: "button", class: "back", onclick: () => backToRoom(a.id) }, `‹ ${a.name}`),
+    el("h2", { id: "sheet-title" }, "Prüfplatz bearbeiten"),
+    el("div", { class: "field" }, el("label", { for: "es-name" }, "Bezeichnung"), el("input", { id: "es-name", value: s.name })),
+    numField("es-dev", "Anzahl Geräte", s.devices || 0, 1, 0),
+    s.rx != null ? el("button", { type: "button", class: "btn block", onclick: async () => {
+      if (await editSpots(a, (spots) => { const x = spots.find((y) => y.id === s.id); if (x) { delete x.rx; delete x.ry; } }, "Position zurückgesetzt")) backToRoom(a.id);
+    } }, "Position automatisch anordnen") : el("p", { class: "muted", style: { margin: 0, fontSize: "14px" } }, "Tipp: Unter ✎ Bearbeiten den Punkt im Grundriss an seine Stelle im Raum ziehen."),
+    err,
+    el("div", { class: "btn-row" }, el("button", { type: "button", class: "btn", onclick: () => backToRoom(a.id) }, "Abbrechen"),
+      el("button", { type: "button", class: "btn primary", onclick: async () => {
+        const nm = $("#es-name").value.trim(); if (!nm) { err.textContent = "Bitte eine Bezeichnung eingeben."; return; }
+        const dev = Math.max(0, Math.round(num("es-dev") || 0));
+        if (await editSpots(a, (spots) => { const x = spots.find((y) => y.id === s.id); if (x) Object.assign(x, { name: nm, devices: dev }); }, "Gespeichert")) backToRoom(a.id);
+      } }, "Speichern")),
+    el("button", { type: "button", class: "btn danger block", onclick: async () => {
+      if (await editSpots(a, (spots) => { const i = spots.findIndex((y) => y.id === s.id); if (i >= 0) spots.splice(i, 1); }, `„${s.name}“ gelöscht`)) backToRoom(a.id);
+    } }, "Prüfplatz löschen")), { id: a.id, spot: s.id, busy: true });
 }
 
 function statusForm(a, key) {
@@ -1008,18 +1364,26 @@ function card(a, sub) {
     el("span", { class: "ci" },
       el("span", { class: "t" }, el("span", {}, a.name), el("span", { class: "muted" }, STATUS[a.status].icon)),
       el("span", { class: "s" }, sub ?? `${stText(a)}${overdue(a) ? " – überfällig" : ""} · ${plan?.name || ""}`),
+      spotLine(a),
       a.note || a.notes ? el("span", { class: "n" }, a.note || a.notes) : null)));
+}
+function spotLine(a) {
+  const st = spotStats(a); if (!st.total) return null;
+  const defects = (a.spots || []).filter((s) => s.status === "defect").map((s) => s.name);
+  return el("span", { class: "n" }, `${st.checked}/${st.total} Prüfplätze`,
+    defects.length ? el("span", { style: { color: "var(--danger)", fontWeight: 600 } }, ` · ✖ Mangel: ${defects.join(", ")}`) : "");
 }
 function buildChips() {
   const box = $("#status-chips"); box.replaceChildren();
   const chip = (k, t) => el("button", { type: "button", class: `chip${S.listStatus === k ? " on" : ""}`, "aria-pressed": S.listStatus === k ? "true" : "false",
     onclick: () => { S.listStatus = k; buildChips(); renderList(); } }, t);
-  box.append(chip("todo", "Noch zu tun"), chip("", "Alle"), ...ORDER.map((k) => chip(k, `${STATUS[k].icon} ${STATUS[k].label}`)));
+  box.append(chip("todo", "Noch zu tun"), chip("", "Alle"), chip("defect", "✖ Mängel"), ...ORDER.map((k) => chip(k, `${STATUS[k].icon} ${STATUS[k].label}`)));
 }
 function renderList() {
   const q = $("#search").value.trim().toLowerCase(), all = $("#list-all").checked || !S.me.id;
-  let items = S.areas.filter((a) => (all || mine(a)) && (!q || `${a.name} ${a.note} ${a.notes}`.toLowerCase().includes(q)));
+  let items = S.areas.filter((a) => (all || mine(a)) && (!q || `${a.name} ${a.note} ${a.notes} ${(a.spots || []).map((s) => s.name + " " + (s.note || "")).join(" ")}`.toLowerCase().includes(q)));
   if (S.listStatus === "todo") items = items.filter((a) => a.status !== "done");
+  else if (S.listStatus === "defect") items = items.filter((a) => spotStats(a).defect > 0);
   else if (S.listStatus) items = items.filter((a) => a.status === S.listStatus);
   items.sort((x, y) => ORDER.indexOf(x.status) - ORDER.indexOf(y.status) || natural(x.name, y.name));
   const ul = $("#area-list"); ul.replaceChildren();
@@ -1093,6 +1457,8 @@ function init() {
   $("#list-all").addEventListener("change", renderList);
   $("#dates-all").addEventListener("change", renderDates);
   const s = svgEl();
+  // Kein Nachklick nach einer Berührung des Grundrisses: er würde sonst im gerade geöffneten Fenster landen.
+  s.addEventListener("touchend", (e) => { if (e.cancelable) e.preventDefault(); }, { passive: false });
   s.addEventListener("pointerdown", onDown); s.addEventListener("pointermove", onMove);
   s.addEventListener("pointerup", onUp); s.addEventListener("pointercancel", (e) => { cancelEditGesture(); onUp(e); });
   s.addEventListener("wheel", (e) => { e.preventDefault(); zoomAt(e.deltaY < 0 ? 1.15 : 1 / 1.15, e.clientX, e.clientY); }, { passive: false });
