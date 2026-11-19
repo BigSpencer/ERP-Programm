@@ -1,0 +1,4 @@
+# Nur für den Smartphone-Server (python -m erp_mobile) – ohne Qt/Oberfläche
+SQLAlchemy>=2.0
+psycopg2-binary>=2.9
+PyMySQL>=1.1

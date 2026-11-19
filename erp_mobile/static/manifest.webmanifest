@@ -1,0 +1,15 @@
+{
+  "name": "Prüfplanung DGUV V3",
+  "short_name": "Prüfplanung",
+  "description": "Prüfbereiche auf dem Grundriss als erledigt, teilweise erledigt, Termin oder in Klärung markieren.",
+  "lang": "de",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#1d2d3e",
+  "theme_color": "#1d2d3e",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

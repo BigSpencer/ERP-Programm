@@ -1,6 +1,7 @@
 """Geschäftslogik – unabhängig von der Oberfläche und damit testbar."""
 from __future__ import annotations
 
+import threading
 from decimal import Decimal, InvalidOperation
 
 from sqlalchemy import select
@@ -13,7 +14,13 @@ class BusinessError(Exception):
     """Fachlicher Fehler, der dem Anwender angezeigt wird."""
 
 
-class _Context:
+class ConflictError(BusinessError):
+    """Datensatz wurde zwischenzeitlich von einem anderen Benutzer geändert."""
+
+
+class _Context(threading.local):
+    """Angemeldeter Benutzer – je Thread getrennt (wichtig für den Mobil-Server,
+    der Anfragen mehrerer Prüfer parallel bearbeitet)."""
     username: str = "system"
     role: str = "admin"
     user_id: int | None = None

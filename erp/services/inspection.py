@@ -17,7 +17,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from .. import models as m
-from . import BusinessError, audit, context
+from . import BusinessError, ConflictError, audit, context
 
 GRID = 0.5          # Raster in Metern (Einrasten beim Zeichnen)
 MIN_SIZE = 0.5      # kleinster Bereich (m)
@@ -34,7 +34,7 @@ def natural_key(text: str) -> list:
 
 def _check_version(obj, version: int | None) -> None:
     if version is not None and obj.version != version:
-        raise BusinessError("Der Datensatz wurde inzwischen von einem anderen Benutzer geändert. "
+        raise ConflictError("Der Datensatz wurde inzwischen von einem anderen Benutzer geändert. "
                             "Die Ansicht wurde aktualisiert – bitte erneut versuchen.")
 
 

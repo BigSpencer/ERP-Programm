@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1d2d3e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Prüfplanung">
+<title>Prüfplanung</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<!-- Anmeldung -->
+<section id="login" class="screen" hidden>
+  <form id="login-form" class="login-card" autocomplete="on">
+    <img src="icon.svg" alt="" class="login-icon">
+    <h1>Prüfplanung</h1>
+    <p class="muted">DGUV Vorschrift 3 · mobil</p>
+    <label>Benutzername
+      <input name="username" autocomplete="username" autocapitalize="none" autocorrect="off" required>
+    </label>
+    <label>Passwort
+      <input name="password" type="password" autocomplete="current-password" required>
+    </label>
+    <p id="login-error" class="error" role="alert"></p>
+    <button class="btn btn-primary btn-block" type="submit">Anmelden</button>
+  </form>
+</section>
+
+<!-- Hauptansicht -->
+<section id="main" class="screen" hidden>
+  <header class="topbar">
+    <button id="plan-picker" class="plan-picker" type="button" aria-haspopup="dialog">
+      <span id="plan-title">Grundriss wählen</span><span class="chev" aria-hidden="true">▾</span>
+    </button>
+    <span id="sync" class="sync" title="Verbindung"><span class="dot"></span><span id="sync-text"></span></span>
+  </header>
+  <div id="offline-banner" class="banner" hidden></div>
+
+  <!-- Grundriss -->
+  <div id="view-plan" class="view">
+    <div class="summary" id="plan-summary"></div>
+    <div class="plan-wrap">
+      <svg id="plan-svg" xmlns="http://www.w3.org/2000/svg" aria-label="Grundriss"></svg>
+      <div class="plan-tools">
+        <button class="fab-small" id="zoom-in" type="button" aria-label="Vergrößern">+</button>
+        <button class="fab-small" id="zoom-out" type="button" aria-label="Verkleinern">−</button>
+        <button class="fab-small" id="zoom-fit" type="button" aria-label="Einpassen">⤢</button>
+      </div>
+      <label class="mine-toggle"><input type="checkbox" id="only-mine"> nur meine</label>
+      <p id="plan-empty" class="empty" hidden></p>
+    </div>
+  </div>
+
+  <!-- Listen -->
+  <div id="view-list" class="view" hidden>
+    <div class="list-head">
+      <input id="search" type="search" placeholder="Raum suchen …" autocomplete="off">
+      <div id="status-chips" class="chips" role="group" aria-label="Status-Filter"></div>
+      <label class="switch-row"><input type="checkbox" id="list-all"> auch Bereiche anderer Prüfer</label>
+    </div>
+    <ul id="area-list" class="cards"></ul>
+  </div>
+
+  <div id="view-dates" class="view" hidden>
+    <div class="list-head">
+      <label class="switch-row"><input type="checkbox" id="dates-all"> Termine aller Prüfer</label>
+    </div>
+    <ul id="date-list" class="cards"></ul>
+  </div>
+
+  <div id="view-more" class="view" hidden>
+    <div class="more">
+      <p><strong id="me-name"></strong><br><span class="muted" id="me-role"></span></p>
+      <p class="muted" id="me-company"></p>
+      <button class="btn btn-block" id="refresh-btn" type="button">Jetzt aktualisieren</button>
+      <button class="btn btn-block" id="logout-btn" type="button">Abmelden</button>
+      <h3>Tipps</h3>
+      <ul class="tips">
+        <li>Grundriss mit zwei Fingern zoomen und verschieben, Raum antippen = Status setzen.</li>
+        <li>„Erledigt“ lässt sich wenige Sekunden lang rückgängig machen.</li>
+        <li>Ohne Netz (Keller, Technikraum) werden Änderungen gespeichert und automatisch übertragen,
+          sobald wieder Verbindung besteht.</li>
+        <li>Zum Startbildschirm hinzufügen: im Browser-Menü „Zum Startbildschirm“ bzw. „App installieren“.</li>
+      </ul>
+      <p class="muted small" id="version"></p>
+    </div>
+  </div>
+
+  <nav class="tabbar" aria-label="Ansichten">
+    <button data-view="plan" class="active" type="button"><span class="ti" aria-hidden="true">▦</span>Grundriss</button>
+    <button data-view="list" type="button"><span class="ti" aria-hidden="true">☰</span>Meine<span class="badge" id="badge-mine" hidden></span></button>
+    <button data-view="dates" type="button"><span class="ti" aria-hidden="true">◷</span>Termine<span class="badge warn" id="badge-dates" hidden></span></button>
+    <button data-view="more" type="button"><span class="ti" aria-hidden="true">⋯</span>Mehr</button>
+  </nav>
+</section>
+
+<!-- Bottom-Sheet (Bereich / Grundriss-Auswahl) -->
+<div id="sheet-backdrop" class="backdrop" hidden></div>
+<div id="sheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" hidden>
+  <div class="grabber" aria-hidden="true"></div>
+  <div id="sheet-body"></div>
+</div>
+
+<div id="toast" class="toast" role="status" hidden><span id="toast-text"></span><button id="toast-action" type="button" hidden></button></div>
+
+<script src="app.js"></script>
+</body>
+</html>

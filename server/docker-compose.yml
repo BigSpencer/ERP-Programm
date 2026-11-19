@@ -29,5 +29,18 @@ services:
       - ./backup.sh:/backup.sh:ro
     entrypoint: ["sh", "/backup.sh"]
 
+  # Smartphone-App für Prüfer (Prüfplanung DGUV V3): http://<IP dieses Rechners>:8080/
+  # Passwort ohne Sonderzeichen wie @ : / verwenden (es steht in der Datenbank-URL).
+  mobile:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile.mobile
+    restart: unless-stopped
+    depends_on: [db]
+    environment:
+      ERP_DATABASE_URL: postgresql+psycopg2://erp:${ERP_DB_PASSWORD:-bitte-aendern}@db:5432/erp
+    ports:
+      - "8080:8080"
+
 volumes:
   erp-data:

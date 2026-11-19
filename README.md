@@ -71,6 +71,44 @@ einen Hinweis statt den Stand des ersten zu überschreiben.
 > Das Modul dient der Organisation der Prüfung. Die Dokumentation der einzelnen
 > Prüflinge mit Messwerten bleibt im Prüfgerät bzw. der Prüfsoftware.
 
+### Smartphone-App „Prüfplanung mobil“
+
+Ein **eigenständiges Programm** für Prüfer unterwegs: ein kleiner Server
+(`python -m erp_mobile`) liefert eine fürs Handy optimierte Oberfläche aus, die im
+Browser läuft – iPhone und Android, ohne App Store. Er nutzt **dieselbe Datenbank**
+wie ERP Desk; was am Handy markiert wird, sieht man sofort am PC und umgekehrt.
+
+| | |
+|---|---|
+| **Grundriss** | farbiger Prüfstand, mit zwei Fingern zoomen/verschieben, Raum antippen → große Status-Knöpfe |
+| **Status** | *Erledigt* mit einem Tipp (einige Sekunden rückgängig machbar), *Teilweise* mit Fortschritts-Regler, *Termin* mit Datum und Schnellwahl (morgen, in 1 Woche), *In Klärung* mit Vorschlägen („Raum verschlossen“, „Mitarbeiter abwesend“ …) |
+| **Meine** | eigene Bereiche nach Status gruppiert, Suche, Filter „noch zu tun“ |
+| **Termine** | eigene (oder alle) Termine nach Datum – überfällig, heute, morgen … |
+| **Ohne Netz** | Keller oder Technikraum ohne Empfang: Änderungen werden auf dem Handy vorgemerkt und automatisch übertragen, sobald wieder Verbindung besteht. Hat ein Kollege den Bereich inzwischen geändert, gibt es einen Hinweis statt stillem Überschreiben. |
+
+Anmeldung mit den ERP-Benutzern der Rolle *Prüfer (DGUV V3)* oder *Administrator*;
+man bleibt 14 Tage angemeldet (Passwortänderung meldet alle Geräte ab).
+Grundrisse werden weiterhin am PC in ERP Desk angelegt (*Vorbereitung*).
+
+**Starten**
+
+```bash
+# mit Docker – zusammen mit der Datenbank (server/docker-compose.yml, Dienst „mobile“):
+cd server && docker compose up -d --build
+# oder direkt (braucht nur requirements-mobile.txt, kein Qt):
+pip install -r requirements-mobile.txt
+ERP_DATABASE_URL=postgresql+psycopg2://erp:PASSWORT@SERVER/erp python -m erp_mobile --port 8080
+```
+
+Auf dem Handy `http://<IP des Servers>:8080/` öffnen (Handy im Firmen-WLAN oder per VPN)
+und im Browser-Menü **„Zum Startbildschirm“** wählen. Für die vollwertige
+App-Installation und das Starten der App ganz ohne Netz verlangen die Browser
+**HTTPS**: entweder `--cert zertifikat.pem --key schluessel.pem` angeben oder den Server
+hinter einen vorhandenen Reverse-Proxy (z. B. Caddy, nginx) mit Zertifikat stellen.
+Das Vormerken von Änderungen ohne Netz funktioniert auch ohne HTTPS.
+
+> Den Port nur im Firmennetz/VPN freigeben, nicht direkt ins Internet.
+
 ### Mehrbenutzerbetrieb
 
 * **Optimistisches Sperren:** Jeder Datensatz hat eine Versionsnummer. Ändern zwei
@@ -169,6 +207,7 @@ erp/
   models.py            Datenmodell (SQLAlchemy)
   services/            Geschäftslogik ohne UI (auth, masterdata, documents, inventory, finance, reports, inspection)
   ui/                  Desktop-Oberfläche (PySide6/Qt)
+erp_mobile/            Smartphone-App: Server (nur Standardbibliothek + SQLAlchemy) und Web-Oberfläche (static/)
   demo.py              Demodaten
 server/                Docker-Compose für PostgreSQL + Backup
 packaging/             PyInstaller-Spec und Windows-Installer (Inno Setup)
