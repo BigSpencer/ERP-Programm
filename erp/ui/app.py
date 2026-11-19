@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 from .. import APP_NAME, __version__, config, db
 from .. import models as m
 from ..services import BusinessError, auth, set_user
+from .inspection import inspection_module
 from .documents import InvoicesPage, PurchaseOrdersPage, SalesOrdersPage
 from .masterdata import CustomersPage, ProductsPage, SuppliersPage
 from .modules import DashboardPage, admin_module, finance_module, inventory_module
@@ -232,6 +233,7 @@ MODULES = [
     ("purchasing", "Bestellungen", "Einkauf (MM)", PurchaseOrdersPage),
     ("inventory", "Lager", "Materialwirtschaft", inventory_module),
     ("finance", "Finanzbuchhaltung", "Rechnungswesen (FI)", finance_module),
+    ("inspection", "Prüfplanung DGUV V3", "Prüfung (DGUV V3)", inspection_module),
     ("admin", "Administration", "System", admin_module),
 ]
 
@@ -306,7 +308,7 @@ class MainWindow(QMainWindow):
         h = mb.addMenu("&Hilfe")
         h.addAction(QAction("Über …", self, triggered=lambda: QMessageBox.about(
             self, APP_NAME, f"<b>{APP_NAME} {__version__}</b><br>Integriertes ERP-System für "
-            "Stammdaten, Vertrieb, Einkauf, Lager und Finanzbuchhaltung.<br><br>"
+            "Stammdaten, Vertrieb, Einkauf, Lager, Finanzbuchhaltung und Prüfplanung (DGUV V3).<br><br>"
             "Lokal installierter Client mit gemeinsamer zentraler Datenbank.")))
 
     def _switch(self, item, _prev=None):

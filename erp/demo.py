@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from . import models as m
-from .services import BusinessError, auth, documents, finance, inventory, masterdata
+from .services import BusinessError, auth, context, documents, finance, inspection, inventory, masterdata
 
 
 def load_demo_data(s: Session) -> None:
@@ -78,3 +78,38 @@ def load_demo_data(s: Session) -> None:
     auth.save_user(s, None, "vertrieb", "Vera Vertrieb", "sales", True, "vertrieb")
     auth.save_user(s, None, "lager", "Lars Lager", "warehouse", True, "lager")
     auth.save_user(s, None, "buchhaltung", "Bea Buchhaltung", "accounting", True, "buchhaltung")
+
+    load_inspection_demo(s)
+
+
+def load_inspection_demo(s: Session) -> None:
+    """Beispiel-Abteilung für die Prüfplanung DGUV V3 mit zwei Prüfern."""
+    p1 = auth.save_user(s, None, "pruefer1", "Paul Prüfer", "inspector", True, "pruefer1")
+    p2 = auth.save_user(s, None, "pruefer2", "Petra Prüferin", "inspector", True, "pruefer2")
+    plan = inspection.save_floor_plan(s, None, {"name": "Verwaltung 1. OG", "location": "Gebäude A",
+                                                "width_m": 36, "height_m": 16,
+                                                "notes": "Schlüssel beim Empfang, Ansprechpartner Hr. Kaiser"})
+    north = inspection.add_row(s, plan.id, "Büro 1.", 1, 6, 0, 0, 6, 6, inspector_id=p1.id)
+    south = inspection.add_row(s, plan.id, "Büro 1.", 11, 4, 0, 10, 6, 6, inspector_id=p2.id)
+    inspection.add_area(s, plan.id, "Flur", 0, 6, 36, 4, expected_devices=4)
+    inspection.add_area(s, plan.id, "Besprechung", 24, 10, 8, 6, inspector_id=p2.id, expected_devices=6)
+    server = inspection.add_area(s, plan.id, "Serverraum", 32, 10, 4, 6, expected_devices=25,
+                                 notes="Nur nach Absprache mit der IT (Abschaltung!)")
+    for a in north + south:
+        a.expected_devices = 8
+    today = dt.date.today()
+    saved = context.username, context.role, context.user_id
+    try:
+        context.username, context.role, context.user_id = p1.username, p1.role, p1.id
+        inspection.set_status(s, north[0].id, "done")
+        inspection.set_status(s, north[1].id, "done")
+        inspection.set_status(s, north[2].id, "partial", progress=60, note="Kaffeeküche noch offen")
+        inspection.set_status(s, north[3].id, "appointment", date=today + dt.timedelta(days=3),
+                              note="Mitarbeiter im Urlaub")
+        context.username, context.role, context.user_id = p2.username, p2.role, p2.id
+        inspection.set_status(s, south[0].id, "done")
+        inspection.set_status(s, south[1].id, "clarify", note="Raum verschlossen, Schlüssel fehlt")
+        inspection.set_status(s, south[2].id, "appointment", date=today - dt.timedelta(days=2))
+    finally:
+        context.username, context.role, context.user_id = saved
+    inspection.assign(s, [server.id], None)

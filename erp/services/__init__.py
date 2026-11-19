@@ -16,6 +16,7 @@ class BusinessError(Exception):
 class _Context:
     username: str = "system"
     role: str = "admin"
+    user_id: int | None = None
 
 
 context = _Context()
@@ -24,6 +25,7 @@ context = _Context()
 def set_user(user: m.User | None) -> None:
     context.username = user.username if user else "system"
     context.role = user.role if user else "admin"
+    context.user_id = user.id if user else None
 
 
 def audit(s: Session, action: str, entity: str, entity_id="", details: str = "") -> None:

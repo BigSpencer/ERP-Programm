@@ -21,7 +21,7 @@ QPushButton, QToolButton { padding: 5px 12px; border: 1px solid #0a6ed1; color: 
     background: white; border-radius: 4px; }
 QPushButton:hover, QToolButton:hover { background: #ebf5fe; }
 QPushButton:disabled { color: #a0a8b0; border-color: #c8ced4; }
-QPushButton#primary { background: #0a6ed1; color: white; }
+QPushButton#primary, QPushButton:checked { background: #0a6ed1; color: white; }
 QPushButton#primary:hover { background: #0854a1; }
 QLineEdit, QComboBox, QDateEdit, QSpinBox, QPlainTextEdit { padding: 4px; border: 1px solid #b0bac4;
     border-radius: 3px; background: white; }

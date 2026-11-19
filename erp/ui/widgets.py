@@ -6,7 +6,7 @@ import traceback
 from decimal import Decimal
 from typing import Any, Callable
 
-from PySide6.QtCore import QDate, Qt, QTimer
+from PySide6.QtCore import QDate, Qt, QTimer, QUrl
 from PySide6.QtGui import QPageLayout, QPageSize, QTextDocument
 from PySide6.QtWidgets import (
     QAbstractItemView, QCheckBox, QComboBox, QDateEdit, QDialog, QDialogButtonBox,
@@ -349,7 +349,17 @@ class ListPage(QWidget):
 # Belegausgabe
 # --------------------------------------------------------------------------
 
-def export_pdf(parent, html: str, filename: str) -> None:
+def _document(html: str, resources: dict | None = None) -> QTextDocument:
+    """HTML-Dokument; ``resources`` = {Name: QImage} für <img src="Name">."""
+    doc = QTextDocument()
+    for name, image in (resources or {}).items():
+        doc.addResource(QTextDocument.ResourceType.ImageResource, QUrl(name), image)
+    doc.setHtml(html)
+    return doc
+
+
+def export_pdf(parent, html: str, filename: str, resources: dict | None = None,
+               landscape: bool = False) -> None:
     from PySide6.QtPrintSupport import QPrinter
 
     path, _ = QFileDialog.getSaveFileName(parent, "Als PDF speichern", filename, "PDF (*.pdf)")
@@ -358,27 +368,25 @@ def export_pdf(parent, html: str, filename: str) -> None:
     printer = QPrinter(QPrinter.PrinterMode.HighResolution)
     printer.setOutputFormat(QPrinter.OutputFormat.PdfFormat)
     printer.setOutputFileName(path)
-    printer.setPageLayout(QPageLayout(QPageSize(QPageSize.PageSizeId.A4),
-                                      QPageLayout.Orientation.Portrait,
+    orientation = QPageLayout.Orientation.Landscape if landscape else QPageLayout.Orientation.Portrait
+    printer.setPageLayout(QPageLayout(QPageSize(QPageSize.PageSizeId.A4), orientation,
                                       printer.pageLayout().margins()))
-    doc = QTextDocument()
-    doc.setHtml(html)
-    doc.print_(printer)
+    _document(html, resources).print_(printer)
     QMessageBox.information(parent, "PDF erstellt", f"Gespeichert unter:\n{path}")
 
 
-def print_html(parent, html: str) -> None:
+def print_html(parent, html: str, resources: dict | None = None) -> None:
     from PySide6.QtPrintSupport import QPrintDialog, QPrinter
 
     printer = QPrinter(QPrinter.PrinterMode.HighResolution)
     if QPrintDialog(printer, parent).exec() == QDialog.DialogCode.Accepted:
-        doc = QTextDocument()
-        doc.setHtml(html)
-        doc.print_(printer)
+        _document(html, resources).print_(printer)
 
 
-def output_menu_button(parent, get_html: Callable[[], tuple[str, str] | None]) -> QToolButton:
-    """Schaltfläche 'Ausgabe' mit Drucken / PDF."""
+def output_menu_button(parent, get_html: Callable[[], tuple | None], landscape: bool = False) -> QToolButton:
+    """Schaltfläche 'Ausgabe' mit Drucken / PDF.
+
+    ``get_html`` liefert (html, dateiname) oder (html, dateiname, {bildname: QImage})."""
     from PySide6.QtWidgets import QMenu
 
     btn = QToolButton(parent)
@@ -389,12 +397,12 @@ def output_menu_button(parent, get_html: Callable[[], tuple[str, str] | None]) -
     def _pdf():
         res = get_html()
         if res:
-            export_pdf(parent, res[0], res[1])
+            export_pdf(parent, res[0], res[1], res[2] if len(res) > 2 else None, landscape)
 
     def _print():
         res = get_html()
         if res:
-            print_html(parent, res[0])
+            print_html(parent, res[0], res[2] if len(res) > 2 else None)
 
     menu.addAction("Als PDF speichern …", _pdf)
     menu.addAction("Drucken …", _print)

@@ -11,7 +11,7 @@ import datetime as dt
 from decimal import Decimal
 
 from sqlalchemy import (
-    Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Text,
+    Boolean, Date, DateTime, Float, ForeignKey, Integer, LargeBinary, Numeric, String, Text,
     UniqueConstraint, func,
 )
 from sqlalchemy.orm import DeclarativeBase, declared_attr, Mapped, mapped_column, relationship
@@ -45,11 +45,12 @@ ROLES = {
     "purchasing": "Einkauf",
     "warehouse": "Lager",
     "accounting": "Buchhaltung",
+    "inspector": "Prüfer (DGUV V3)",
 }
 
 # Welche Rollen welches Modul nutzen dürfen (admin darf alles)
 MODULE_ROLES = {
-    "dashboard": set(ROLES),
+    "dashboard": set(ROLES) - {"inspector"},
     "customers": {"sales", "accounting"},
     "suppliers": {"purchasing", "accounting"},
     "products": {"sales", "purchasing", "warehouse"},
@@ -58,6 +59,7 @@ MODULE_ROLES = {
     "purchasing": {"purchasing"},
     "inventory": {"warehouse", "purchasing"},
     "finance": {"accounting"},
+    "inspection": {"inspector"},
     "admin": set(),
 }
 
@@ -398,3 +400,84 @@ class JournalLine(Base):
 
     entry: Mapped[JournalEntry] = relationship(back_populates="lines")
     account: Mapped[Account] = relationship()
+
+
+# --------------------------------------------------------------------------
+# Prüfplanung DGUV V3 (Prüfung elektrischer Anlagen und Betriebsmittel)
+# --------------------------------------------------------------------------
+
+AREA_STATUS = {
+    "open": "Offen",
+    "partial": "Teilweise erledigt",
+    "appointment": "Termin",
+    "clarify": "In Klärung",
+    "done": "Erledigt",
+}
+
+# Farben für Grundriss und Berichte (Füllung, Rand)
+AREA_COLORS = {
+    "open": ("#eef1f4", "#8a96a3"),
+    "partial": ("#fff1c2", "#d39e00"),
+    "appointment": ("#d6e9ff", "#0a6ed1"),
+    "clarify": ("#ffd9d6", "#d0271d"),
+    "done": ("#d4f2dc", "#1e8e3e"),
+}
+
+
+class FloorPlan(Versioned, Base):
+    """Grundriss einer Abteilung / Etage. Maße in Metern."""
+    __tablename__ = "floor_plans"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(120))
+    location: Mapped[str] = mapped_column(String(120), default="")   # Standort / Gebäude
+    width_m: Mapped[float] = mapped_column(Float, default=40.0)
+    height_m: Mapped[float] = mapped_column(Float, default=20.0)
+    background: Mapped[bytes | None] = mapped_column(LargeBinary, deferred=True)
+    has_background: Mapped[bool] = mapped_column(Boolean, default=False)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    areas: Mapped[list["InspectionArea"]] = relationship(
+        back_populates="floor_plan", cascade="all, delete-orphan", order_by="InspectionArea.name")
+
+
+class InspectionArea(Versioned, Base):
+    """Prüfbereich (Raum oder Teilfläche) auf einem Grundriss."""
+    __tablename__ = "inspection_areas"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    floor_plan_id: Mapped[int] = mapped_column(ForeignKey("floor_plans.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(80))
+    x: Mapped[float] = mapped_column(Float, default=0.0)
+    y: Mapped[float] = mapped_column(Float, default=0.0)
+    w: Mapped[float] = mapped_column(Float, default=4.0)
+    h: Mapped[float] = mapped_column(Float, default=4.0)
+    inspector_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    expected_devices: Mapped[int] = mapped_column(Integer, default=0)   # geschätzte Anzahl Prüflinge
+    status: Mapped[str] = mapped_column(String(20), default="open")
+    progress_pct: Mapped[int] = mapped_column(Integer, default=0)
+    appointment_date: Mapped[dt.date | None] = mapped_column(Date)
+    status_note: Mapped[str] = mapped_column(Text, default="")
+    status_by: Mapped[str] = mapped_column(String(50), default="")
+    status_at: Mapped[dt.datetime | None] = mapped_column(DateTime)
+    notes: Mapped[str] = mapped_column(Text, default="")              # Hinweise aus der Vorbereitung
+
+    floor_plan: Mapped[FloorPlan] = relationship(back_populates="areas")
+    inspector: Mapped[User | None] = relationship()
+
+    @property
+    def overdue(self) -> bool:
+        return (self.status == "appointment" and self.appointment_date is not None
+                and self.appointment_date < dt.date.today())
+
+
+class AreaStatusLog(Base):
+    """Verlauf aller Statusänderungen eines Prüfbereichs."""
+    __tablename__ = "area_status_log"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    area_id: Mapped[int] = mapped_column(ForeignKey("inspection_areas.id", ondelete="CASCADE"))
+    timestamp: Mapped[dt.datetime] = mapped_column(DateTime, default=dt.datetime.now)
+    username: Mapped[str] = mapped_column(String(50), default="")
+    status: Mapped[str] = mapped_column(String(20))
+    progress_pct: Mapped[int] = mapped_column(Integer, default=0)
+    appointment_date: Mapped[dt.date | None] = mapped_column(Date)
+    note: Mapped[str] = mapped_column(Text, default="")

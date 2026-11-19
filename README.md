@@ -29,6 +29,7 @@ in Echtzeit auf denselben Daten.
 | **Einkauf (MM)** | Bestellungen · *Entwurf → Bestellt → (Teil-)Geliefert* · Wareneingang mit Teilmengen · automatische Bestellvorschläge aus Mindestbeständen |
 | **Lager** | Bestände je Lagerort, Zu-/Abgänge, Umlagerungen, Inventur, vollständige Bewegungshistorie |
 | **Finanzbuchhaltung (FI)** | Doppelte Buchführung (SKR03-angelehnter Kontenrahmen), Journal, manuelle Buchungssätze, Summen- und Saldenliste, offene Posten, GuV |
+| **Prüfplanung (DGUV V3)** | Grundrisse je Abteilung/Etage zeichnen, Prüfbereiche markieren und Prüfern zuweisen · Status je Bereich: *offen, erledigt, teilweise erledigt (%), Termin (Datum), in Klärung* · farbiger Prüfstand im Grundriss, Bereichsliste, Statusverlauf, Prüfbericht als PDF (siehe unten) |
 | **Administration** | Benutzer & Rollen (Admin, Vertrieb, Einkauf, Lager, Buchhaltung), Firmendaten für Belege, Änderungsprotokoll |
 
 Automatische Buchungen:
@@ -36,6 +37,39 @@ Automatische Buchungen:
 * Rechnung: *Forderungen (1400)* an *Erlöse (8400/8300)* und *Umsatzsteuer (1776/1771)*
 * Zahlung: *Bank (1200) / Kasse (1000)* an *Forderungen (1400)*
 * Wareneingang: *Wareneingang (3400/3300)* und *Vorsteuer (1576/1571)* an *Verbindlichkeiten (1600)*
+
+### Prüfplanung DGUV V3
+
+Hilft Prüfern elektrischer Betriebsmittel (DGUV Vorschrift 3) bei der Organisation
+in den Räumen einer Abteilung. Die Rolle **Prüfer (DGUV V3)** sieht nur dieses Modul.
+
+**Vorbereitung** (Schalter *✎ Vorbereitung*):
+
+1. *Neu …* → Grundriss anlegen (Name, Gebäude, Breite × Tiefe in Metern).
+2. Räume/Prüfbereiche mit der Maus **als Rechteck aufziehen** und benennen – alles
+   rastet im 0,5-m-Raster ein. Verschieben per Ziehen, Größe an der Ecke unten rechts,
+   Doppelklick = Eigenschaften (Prüfer, ca. Anzahl Prüflinge, Zugangshinweise), Entf = löschen.
+3. *Raumreihe …* legt viele gleiche Räume auf einmal an (z. B. „Büro 1.1“ … „Büro 1.8“).
+4. Optional *Hintergrundbild …*: eingescannten Plan oder Fluchtwegplan als Zeichenvorlage hinterlegen.
+5. Bereiche einem Prüfer zuweisen (auch mehrere markierte auf einmal, Strg+Klick).
+
+**Laufender Betrieb** (Schalter *✔ Prüfen*): Bereich anklicken (oder Rechtsklick) und
+Status setzen – **Erledigt**, **Teilweise erledigt** (mit Fortschritt in %),
+**Termin** (mit Datum) oder **In Klärung** (mit Begründung). Die Farben im Grundriss
+zeigen den Stand, überfällige Termine sind rot gestrichelt. Jede Änderung wird mit
+Benutzer und Zeitpunkt im Verlauf festgehalten. *Prüfbericht* erzeugt ein PDF mit
+Grundriss und Tabelle; *Kopieren …* übernimmt den Grundriss für die nächste
+Wiederholungsprüfung (alle Bereiche wieder „offen“).
+
+**Mehrere Prüfer im selben Bereich:** Alle Prüfer arbeiten auf derselben Datenbank;
+der Grundriss lädt Änderungen der Kollegen alle 30 Sekunden nach. Ein einem Prüfer
+zugewiesener Bereich kann nur von diesem (oder einem Administrator) geändert
+werden; nicht zugewiesene Bereiche übernimmt, wer sie zuerst markiert
+(*Übernehmen*). Ändern zwei Prüfer gleichzeitig denselben Bereich, erhält der zweite
+einen Hinweis statt den Stand des ersten zu überschreiben.
+
+> Das Modul dient der Organisation der Prüfung. Die Dokumentation der einzelnen
+> Prüflinge mit Messwerten bleibt im Prüfgerät bzw. der Prüfsoftware.
 
 ### Mehrbenutzerbetrieb
 
@@ -119,7 +153,8 @@ Für automatisierte Verteilung kann die Verbindung statt per Dialog auch über
 `ERP_DATABASE_URL` (z. B. `postgresql+psycopg2://erp:pw@server/erp`) oder eine
 vorbereitete `config.ini` (Pfad über `ERP_CONFIG`) vorgegeben werden.
 
-Demodaten-Benutzer: `vertrieb/vertrieb`, `lager/lager`, `buchhaltung/buchhaltung`.
+Demodaten-Benutzer: `vertrieb/vertrieb`, `lager/lager`, `buchhaltung/buchhaltung`,
+`pruefer1/pruefer1`, `pruefer2/pruefer2` (Beispiel-Grundriss „Verwaltung 1. OG“).
 
 Unterstützte Datenbanken: **PostgreSQL** (empfohlen), MySQL/MariaDB, SQLite
 (nur Einzelplatz/Test – SQLite-Dateien auf Netzlaufwerken sind für
@@ -132,7 +167,7 @@ erp/
   config.py            lokale Verbindungskonfiguration
   db.py                Verbindung, Schema, Grunddaten (Kontenrahmen, Nummernkreise, admin)
   models.py            Datenmodell (SQLAlchemy)
-  services/            Geschäftslogik ohne UI (auth, masterdata, documents, inventory, finance, reports)
+  services/            Geschäftslogik ohne UI (auth, masterdata, documents, inventory, finance, reports, inspection)
   ui/                  Desktop-Oberfläche (PySide6/Qt)
   demo.py              Demodaten
 server/                Docker-Compose für PostgreSQL + Backup
