@@ -76,9 +76,32 @@ def init_schema(eng: Engine | None = None) -> None:
     """Legt fehlende Tabellen an und schreibt Grunddaten (idempotent)."""
     eng = eng or engine()
     m.Base.metadata.create_all(eng)
+    add_missing_columns(eng)
     with Session(eng) as s:
         seed(s)
         s.commit()
+
+
+def add_missing_columns(eng: Engine) -> list[str]:
+    """Ergänzt neue Spalten in bestehenden Tabellen (create_all legt nur fehlende Tabellen an).
+
+    Neue Spalten werden ohne Pflichtfeld-Einschränkung angelegt, damit vorhandene
+    Datensätze gültig bleiben. Gibt die ergänzten Spalten zurück.
+    """
+    insp = inspect(eng)
+    added = []
+    for table in m.Base.metadata.sorted_tables:
+        if not insp.has_table(table.name):
+            continue
+        existing = {c["name"] for c in insp.get_columns(table.name)}
+        for col in table.columns:
+            if col.name in existing:
+                continue
+            ddl = f'ALTER TABLE {table.name} ADD COLUMN {col.name} {col.type.compile(dialect=eng.dialect)}'
+            with eng.begin() as conn:
+                conn.exec_driver_sql(ddl)
+            added.append(f"{table.name}.{col.name}")
+    return added
 
 
 DEFAULT_ACCOUNTS = [
@@ -115,6 +138,7 @@ DEFAULT_RANGES = [
     ("vehicle", "FZ-", 1, 6),
     ("vehicle_model", "MD-", 1, 4),
     ("vehicle_order", "FB-", 1, 6),
+    ("offer", "AG-", 1, 6),
     ("vehicle_sale", "KV-", 1, 6),
     ("used_purchase", "AK-", 1, 6),
 ]

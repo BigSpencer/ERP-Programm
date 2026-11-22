@@ -56,6 +56,8 @@ async function api(name, body) { const r = await request("/api/action/" + name, 
 const STATUS = { lager: "Lager", ausstellung: "Ausstellung", reserviert: "Reserviert", verkauft: "Verkauft", ausgebucht: "Ausgebucht" };
 const AVAILABLE = ["lager", "ausstellung", "reserviert"];
 const ORDER_STATUS = { bestellt: "Bestellt", eingetroffen: "Eingetroffen", ausgeliefert: "Ausgeliefert", storniert: "Storniert" };
+const OFFER_STATUS = { offen: "Offen", abgelehnt: "Abgelehnt", abgelaufen: "Abgelaufen", bestellt: "Bestellt" };
+const SALE_STATUS = { ok: "Abgeschlossen", storno: "Storniert" };
 const PAY = { bank: "Überweisung", bar: "Bar" };
 const CATS = ["Kompakt", "Limousine", "Coupé", "Cabrio", "Sportwagen", "Supersportwagen", "SUV", "Geländewagen", "Muscle Car", "Klassiker", "Van", "Transporter", "Motorrad", "Sonstige"];
 
@@ -72,6 +74,7 @@ function history(cid) {
     if (s.tradeId) out.push([s.date, "Inzahlungnahme", s.nr, vLabel(byId("vehicles", s.tradeId)), s.tradeValue]);
   });
   S.purchases.filter(p => p.customerId === cid).forEach(p => out.push([p.date, "Ankauf von Kunde" + (p.status === "storno" ? " (storniert)" : ""), p.nr, vLabel(byId("vehicles", p.vehicleId)), p.price]));
+  S.offers.filter(o => o.customerId === cid).forEach(o => out.push([o.date, `Angebot (${OFFER_STATUS[o.status]})`, o.nr, offerSubject(o), o.price]));
   S.orders.filter(o => o.customerId === cid).forEach(o => { const m = byId("models", o.modelId); out.push([o.date, `Bestellung (${ORDER_STATUS[o.status]})`, o.nr, (m ? m.make + " " + m.model : "") + (o.color ? ", " + o.color : ""), o.vk]); });
   S.vehicles.filter(v => v.resFor === cid && v.status === "reserviert").forEach(v => out.push([v.resUntil || today(), "Reservierung", v.nr, vLabel(v), v.vk]));
   return out.sort((a, b) => b[0].localeCompare(a[0]));
@@ -103,13 +106,14 @@ function monthly() {
 /* ------------------------------------------------------------------ Ansicht */
 const VIEWS = [
   ["cockpit", "Cockpit", "Autohaus"], ["bestand", "Fahrzeugbestand", "Autohaus"], ["ausstellung", "Ausstellung", "Autohaus"],
-  ["bestellungen", "Bestellungen", "Autohaus"], ["verkauf", "Verkauf", "Autohaus"], ["ankauf", "Gebrauchtwagen-Ankauf", "Autohaus"],
+  ["angebote", "Angebote", "Autohaus"], ["bestellungen", "Bestellungen", "Autohaus"], ["verkauf", "Verkauf", "Autohaus"], ["ankauf", "Gebrauchtwagen-Ankauf", "Autohaus"],
   ["kunden", "Kunden", "Stammdaten"], ["katalog", "Fahrzeugkatalog", "Stammdaten"], ["einstellungen", "Firmendaten", "System"], ["benutzer", "Benutzer", "System"]];
 const UI = { view: "cockpit", sel: {}, q: {}, filter: { bestand: "verfuegbar", cond: "", openOnly: true, year: String(new Date().getFullYear()) } };
 const allowed = v => S.me.views.includes(v);
 
 function counts() {
   return { bestand: S.vehicles.filter(v => AVAILABLE.includes(v.status)).length, ausstellung: S.vehicles.filter(v => v.showSince && AVAILABLE.includes(v.status)).length,
+    angebote: S.offers.filter(o => o.status === "offen").length,
     bestellungen: S.orders.filter(o => ["bestellt", "eingetroffen"].includes(o.status)).length, kunden: S.customers.length, katalog: S.models.length };
 }
 function setBrand(topId, subId) {
@@ -135,7 +139,7 @@ function render() {
   if (!S) return;
   renderNav();
   const mob = `<div class="mobileWho">${esc(S.me.fullName || S.me.username)} · <button data-a="pw">Passwort</button><button data-a="logout">Abmelden</button></div>`;
-  const views = { cockpit, bestand, ausstellung, bestellungen, verkauf, ankauf, kunden, katalog, einstellungen, benutzer };
+  const views = { cockpit, bestand, ausstellung, angebote, bestellungen, verkauf, ankauf, kunden, katalog, einstellungen, benutzer };
   $("#main").innerHTML = mob + views[UI.view]();
   const q = $("#q"); if (q) q.value = UI.q[UI.view] || "";
 }
@@ -220,16 +224,59 @@ function ausstellung() {
 }
 
 /* Bestellungen */
+/* Status-Auswahl in der Tabellenzeile: zeigt nur erlaubte Wechsel */
+function statusSelect(kind, id, cur, labels, allowedNext) {
+  const opts = [cur, ...allowedNext.filter(x => x !== cur)];
+  return `<select class="rowStatus st-${cur}" data-kind="${kind}" data-id="${esc(id)}" aria-label="Status ändern" ${opts.length < 2 ? "disabled" : ""}>` +
+    opts.map(k => `<option value="${k}" ${k === cur ? "selected" : ""}>${labels[k]}</option>`).join("") + `</select>`;
+}
+function offerNext(o) { return o.status === "bestellt" ? [] : ["offen", "abgelehnt", "abgelaufen", "bestellt"]; }
+function orderNext(o) {
+  const v = o.vehicleId && byId("vehicles", o.vehicleId);
+  switch (o.status) {
+    case "bestellt": return ["eingetroffen", "storniert"];
+    case "eingetroffen": return [...(v && v.source === "order" ? ["bestellt"] : []), ...(o.customerId && allowed("verkauf") ? ["ausgeliefert"] : []), "storniert"];
+    case "ausgeliefert": return allowed("verkauf") ? ["eingetroffen"] : [];
+    case "storniert": return v ? (["lager", "ausstellung"].includes(v.status) ? ["eingetroffen"] : []) : ["bestellt"];
+  }
+  return [];
+}
+function saleNext(s) { return s.status === "ok" ? ["storno"] : []; }
+const offerSubject = o => { const v = o.vehicleId && byId("vehicles", o.vehicleId), m = o.modelId && byId("models", o.modelId);
+  return v ? vLabel(v) : m ? `${m.model} – ${m.make}` : ""; };
+const orderOfOffer = o => o.orderId ? byId("orders", o.orderId) : null;
+
+/* Angebote */
+function angebote() {
+  const f = UI.filter.offer || "aktiv";
+  const list = S.offers.filter(o => (f === "alle" || (f === "aktiv" ? o.status === "offen" : o.status === f)) &&
+    match([o.nr, custName(o.customerId), offerSubject(o), o.color].join(" "))).sort((a, b) => b.nr.localeCompare(a.nr));
+  const sum = list.filter(o => o.status === "offen").reduce((a, o) => a + o.price, 0);
+  return head("Autohaus", "Angebote", "Schritt 1 von 3: Angebot an den Kunden. Zahlt oder zahlt er an, wird über den Status „Bestellt“ daraus eine Bestellung.") +
+    `<div class="bar">${searchBox("Angebot, Kunde, Fahrzeug …")}<select id="fOffer" aria-label="Filter">${[["aktiv", "Offene Angebote"], ["bestellt", "Bestellt"], ["abgelehnt", "Abgelehnt"], ["abgelaufen", "Abgelaufen"], ["alle", "Alle Angebote"]].map(([k, l]) => `<option value="${k}" ${f === k ? "selected" : ""}>${l}</option>`).join("")}</select>
+    <span class="grow"></span>${btn("aNew", "Neues Angebot", "primary")}${btn("aEdit", "Bearbeiten")}${btn("aDoc", "Angebot ansehen")}${btn("aDel", "Löschen", "danger")}</div>` +
+    tbl([["Nr."], ["Datum"], ["Kunde"], ["Fahrzeug / Modell"], ["Farbe", 0, 1], ["Preis", 1], ["Gültig bis"], ["Status"], ["Bestellung", 0, 1]],
+      list.map(o => { const late = o.status === "offen" && o.validUntil && o.validUntil < today(), ord = orderOfOffer(o);
+        return { id: o.id, cells: [o.nr, de(o.date), esc(custName(o.customerId)), esc(offerSubject(o)), esc(o.color), num(o.price),
+          `<span class="${late ? "late" : ""}">${de(o.validUntil) || "–"}${late ? " · abgelaufen?" : ""}</span>`,
+          statusSelect("offer", o.id, o.status, OFFER_STATUS, offerNext(o)), ord ? ord.nr : ""] }; }),
+      S.offers.length ? "Keine Angebote für diesen Filter" : "Noch keine Angebote. Lege mit „Neues Angebot“ das erste an.") +
+    `<div class="foot">${list.length} Angebot(e)${sum ? ` · offenes Volumen ${money(sum)}` : ""}</div>`;
+}
+
+/* Bestellungen */
 function bestellungen() {
   const list = S.orders.filter(o => { const m = byId("models", o.modelId) || {}; return (!UI.filter.openOnly || ["bestellt", "eingetroffen"].includes(o.status)) &&
     match([o.nr, m.make, m.model, custName(o.customerId), o.color].join(" ")); }).sort((a, b) => b.nr.localeCompare(a.nr));
-  return head("Autohaus", "Bestellungen", "Fahrzeuge beim Hersteller bestellen, als Lagerfahrzeug oder für einen Kunden mit Anzahlung") +
+  const offerNr = id => S.offers.find(x => x.orderId === id)?.nr || "";
+  return head("Autohaus", "Bestellungen", "Schritt 2 von 3: Bestellung mit Anzahlung. Status „Eingetroffen“ bucht das Fahrzeug ein, „Ausgeliefert“ erstellt mit der Übergabe den Verkauf.") +
     `<div class="bar">${searchBox("Bestellung, Modell, Kunde …")}<label style="display:flex;gap:6px;align-items:center"><input id="fOpen" type="checkbox" ${UI.filter.openOnly ? "checked" : ""}> nur offene</label>
-    <span class="grow"></span>${btn("oNew", "Neue Bestellung", "primary")}${btn("oEdit", "Bearbeiten")}${btn("oRecv", "Fahrzeug eingetroffen")}${btn("oCancel", "Stornieren", "danger")}${btn("oDoc", "Bestellbestätigung")}</div>` +
-    tbl([["Nr."], ["Datum"], ["Modell"], ["Farbe", 0, 1], ["Für Kunde"], ["EK", 1], ["VK", 1], ["Anzahlung", 1], ["Liefertermin"], ["Status"], ["Fahrzeug", 0, 1]],
+    <span class="grow"></span>${btn("oNew", "Neue Bestellung", "primary")}${btn("oEdit", "Bearbeiten")}${btn("oDoc", "Bestellbestätigung")}${btn("oDel", "Löschen", "danger")}</div>` +
+    tbl([["Nr."], ["Datum"], ["Modell"], ["Farbe", 0, 1], ["Für Kunde"], ["VK", 1], ["Anzahlung", 1], ["Offen", 1], ["Liefertermin"], ["Status"], ["Fahrzeug", 0, 1], ["Angebot", 0, 1]],
       list.map(o => { const m = byId("models", o.modelId), late = o.status === "bestellt" && o.expected && o.expected < today();
-        return { id: o.id, cells: [o.nr, de(o.date), esc(m ? m.make + " " + m.model : ""), esc(o.color), esc(o.customerId ? custName(o.customerId) : "– Lager –"), num(o.ek), num(o.vk), num(o.deposit),
-          `<span class="${late ? "late" : ""}">${de(o.expected) || "–"}${late ? " · überfällig" : ""}</span>`, pill(o.status, ORDER_STATUS[o.status]), o.vehicleId ? byId("vehicles", o.vehicleId)?.nr || "" : ""] }; }),
+        return { id: o.id, cells: [o.nr, de(o.date), esc(m ? `${m.model} – ${m.make}` : ""), esc(o.color), esc(o.customerId ? custName(o.customerId) : "– Lager –"), num(o.vk), num(o.deposit), num(o.vk - o.deposit),
+          `<span class="${late ? "late" : ""}">${de(o.expected) || "–"}${late ? " · überfällig" : ""}</span>`,
+          statusSelect("order", o.id, o.status, ORDER_STATUS, orderNext(o)), o.vehicleId ? byId("vehicles", o.vehicleId)?.nr || "" : "", offerNr(o.id)] }; }),
       "Keine Bestellungen");
 }
 
@@ -240,12 +287,12 @@ function verkauf() {
   const ok = list.filter(s => s.status === "ok"), tot = ok.reduce((a, s) => a + s.price, 0), mg = ok.reduce((a, s) => a + s.price - s.ek, 0);
   const years = [...new Set(S.sales.map(s => s.date.slice(0, 4)).concat(String(new Date().getFullYear())))].sort().reverse();
   const bySeller = {}; ok.forEach(s => { const b = bySeller[s.seller] ||= [0, 0, 0]; b[0]++; b[1] += s.price; b[2] += s.price - s.ek; });
-  return head("Autohaus", "Verkauf", "Kaufverträge mit Inzahlungnahme, Rohertrag je Fahrzeug und Auswertung nach Verkäufer") +
+  return head("Autohaus", "Verkauf", "Schritt 3 von 3: Übergabe mit Restzahlung. Entsteht aus einer ausgelieferten Bestellung oder direkt über „Neuer Verkauf“.") +
     `<div class="bar">${searchBox("Vertrag, Käufer, Fahrzeug …")}<select id="fYear" aria-label="Jahr"><option value="">Alle Jahre</option>${years.map(x => `<option ${x === y ? "selected" : ""}>${x}</option>`).join("")}</select>
-    <span class="grow"></span>${btn("vSell", "Neuer Verkauf", "primary")}${btn("kDoc", "Kaufvertrag ansehen")}${btn("kCancel", "Stornieren", "danger")}</div>` +
-    tbl([["Nr."], ["Datum"], ["Fahrzeug"], ["Käufer"], ["Kaufpreis", 1], ["Inzahlungn.", 1], ["Zahlbetrag", 1], ["EK", 1], ["Rohertrag", 1], ["Zahlung", 0, 1], ["Verkäufer", 0, 1], ["Status"]],
-      list.map(s => ({ id: s.id, cells: [s.nr, de(s.date), esc(vLabel(byId("vehicles", s.vehicleId))), esc(custName(s.customerId)), num(s.price), s.tradeValue ? num(s.tradeValue) : "–", num(s.price - s.tradeValue), num(s.ek),
-        num(s.price - s.ek), PAY[s.pay], esc(s.seller), pill(s.status, s.status === "ok" ? "Abgeschlossen" : "Storniert")] })), "Keine Verkäufe im gewählten Zeitraum") +
+    <span class="grow"></span>${btn("vSell", "Neuer Verkauf", "primary")}${btn("kDoc", "Kaufvertrag ansehen")}${btn("kDel", "Löschen", "danger")}</div>` +
+    tbl([["Nr."], ["Datum"], ["Fahrzeug"], ["Käufer"], ["Kaufpreis", 1], ["Anzahlung", 1], ["Inzahlungn.", 1], ["Restzahlung", 1], ["EK", 1], ["Rohertrag", 1], ["Zahlung", 0, 1], ["Verkäufer", 0, 1], ["Status"], ["Bestellung", 0, 1]],
+      list.map(s => ({ id: s.id, cells: [s.nr, de(s.date), esc(vLabel(byId("vehicles", s.vehicleId))), esc(custName(s.customerId)), num(s.price), s.deposit ? num(s.deposit) : "–", s.tradeValue ? num(s.tradeValue) : "–", num(s.price - s.tradeValue - s.deposit), num(s.ek),
+        num(s.price - s.ek), PAY[s.pay], esc(s.seller), statusSelect("sale", s.id, s.status, SALE_STATUS, saleNext(s)), s.orderId ? byId("orders", s.orderId)?.nr || "" : ""] })), "Keine Verkäufe im gewählten Zeitraum") +
     `<div class="foot">${ok.length} Verkauf/Verkäufe · Umsatz ${money(tot)} · Rohertrag ${money(mg)}</div>
     <div style="margin-top:18px"><h3 class="eyebrow">Nach Verkäufer</h3>${tbl([["Verkäufer"], ["Anzahl", 1], ["Umsatz", 1], ["Rohertrag", 1]],
       Object.entries(bySeller).sort((a, b) => b[1][1] - a[1][1]).map(([n, [c, t, m]]) => ({ id: "s-" + n, cells: [esc(n), c, num(t), num(m)] })), "Keine Daten")}</div>`;
@@ -465,6 +512,83 @@ function orderDialog(o, preset = {}) {
     modelFill: { ek: "ek", vk: "vk" }, fillNow: !o,
     values: o ? { ...o } : { date: today(), ...preset }, onSubmit: async d => { const r = await api("saveOrder", { ...d, id: o?.id }); UI.sel.bestellungen = r.id; return r.message; } });
 }
+function offerDialog(o) {
+  if (!S.customers.length) return toast("Bitte zuerst den Kunden unter Kunden anlegen.");
+  const vehicles = S.vehicles.filter(x => AVAILABLE.includes(x.status) || x.id === o?.vehicleId).map(x => [x.id, `${vLabel(x)} · VK ${money(x.vk)}`]);
+  if (!S.models.length && !vehicles.length) return toast("Bitte zuerst Modelle im Fahrzeugkatalog oder Fahrzeuge im Bestand anlegen.");
+  const validDefault = (() => { const d = new Date(); d.setDate(d.getDate() + 14); return iso(d); })();
+  form({ title: o ? `Angebot ${o.nr} bearbeiten` : "Neues Angebot",
+    sub: "Entweder ein Fahrzeug aus dem Bestand anbieten oder ein Modell aus dem Katalog, das bestellt wird.",
+    fields: [["customerId", "Kunde", "select", { options: custOpts(), full: true }],
+      ["vehicleId", "Fahrzeug aus dem Bestand", "select", { options: vehicles, empty: "– keins, Katalogmodell bestellen –", full: true }],
+      ["modelId", "oder Katalogmodell", "select", { options: modelOpts(), empty: "–", full: true }],
+      ["color", "Farbe / Ausstattung"], ["price", "Angebotspreis", "money", { hint: "leer = Listenpreis" }],
+      ["date", "Angebotsdatum", "date"], ["validUntil", "Gültig bis", "date"], ["notes", "Notizen", "area"]],
+    values: o ? { ...o } : { date: today(), validUntil: validDefault }, modelFill: { price: "vk" },
+    onSubmit: async d => { const r = await api("saveOffer", { ...d, id: o?.id }); UI.sel.angebote = r.id; return r.message; } });
+  $("#f_vehicleId").addEventListener("change", e => {
+    const v = byId("vehicles", e.target.value); if (!v) return;
+    $("#f_modelId").value = ""; $("#f_price").value = num(v.vk); if (v.color) $("#f_color").value = v.color;
+  });
+  $("#f_modelId").addEventListener("change", e => { if (e.target.value) $("#f_vehicleId").value = ""; });
+}
+function convertOfferDialog(o) {
+  form({ title: `Angebot ${o.nr} → Bestellung`, sub: `${esc(custName(o.customerId))} · ${esc(offerSubject(o))} · ${money(o.price)}<br>Trage ein, was der Kunde bereits bezahlt hat. Bei Vollzahlung den vollen Preis eintragen.`,
+    fields: [["deposit", "Bezahlt / Anzahlung", "money", { hint: "0 = noch nichts bezahlt" }], ["date", "Bestelldatum", "date"],
+      ...(o.vehicleId ? [] : [["expected", "Voraussichtliche Lieferung", "date"]])],
+    values: { date: today() }, submit: "Bestellung anlegen",
+    onSubmit: async d => { const r = await api("offerStatus", { id: o.id, status: "bestellt", ...d }); UI.sel.bestellungen = r.id; location.hash = "bestellungen"; return r.message; } });
+}
+function receiveDialog(o) {
+  form({ title: "Fahrzeugeingang " + o.nr, sub: "Das Fahrzeug wird in den Bestand gebucht" + (o.customerId ? " und für " + esc(custName(o.customerId)) + " reserviert." : "."),
+    fields: [["vin", "Fahrgestellnummer (FIN)"], ["plate", "Kennzeichen"], ["year", "Baujahr", "int"], ["km", "Kilometerstand", "int"], ["date", "Eingangsdatum", "date"]],
+    values: { year: new Date().getFullYear(), date: today() }, submit: "Eingang buchen",
+    onSubmit: async d => done(await api("orderStatus", { id: o.id, status: "eingetroffen", ...d })) });
+}
+function deliverDialog(o) {
+  const v = byId("vehicles", o.vehicleId);
+  form({ title: `Übergabe ${o.nr} → Verkauf`, wide: true,
+    sub: `${esc(custName(o.customerId))} · ${esc(vLabel(v))}<br>Mit der Übergabe und der Restzahlung wird der Kaufvertrag erstellt.`,
+    fields: [["price", "Verkaufspreis", "money"], ["date", "Übergabedatum", "date"], ["pay", "Restzahlung per", "select", { options: Object.entries(PAY) }],
+      ["hasTrade", "Fahrzeug wird in Zahlung genommen", "check"],
+      ["sec1", "Inzahlungnahme (nur wenn angehakt)", "sec"], ["tModel", "Modell"], ["tMake", "Hersteller"], ["tPlate", "Kennzeichen"], ["tKm", "Kilometerstand", "int"],
+      ["tValue", "Anrechnungswert", "money"], ["tVk", "Geplanter Wiederverkaufspreis", "money"], ["c", "", "calc"], ["notes", "Vereinbarungen", "area"]],
+    values: { price: o.vk, date: today(), pay: "bank" }, submit: "Übergabe abschließen",
+    onInput: d => {
+      const price = d.price === "" ? o.vk : parseMoney(d.price), tv = d.hasTrade ? parseMoney(d.tValue) : 0;
+      $("#calc").innerHTML = `Verkaufspreis <b>${money(price)}</b> · Anzahlung ${money(o.deposit)}${tv ? ` · Inzahlungnahme ${money(tv)}` : ""} · <b>Restzahlung ${money(price - o.deposit - tv)}</b> · Rohertrag ${money(price - (v?.ek || 0))}`;
+    },
+    onSubmit: async d => {
+      const trade = d.hasTrade ? { make: d.tMake, model: d.tModel, plate: d.tPlate, km: d.tKm, value: d.tValue, vk: d.tVk } : null;
+      const r = await api("orderStatus", { id: o.id, status: "ausgeliefert", price: d.price, date: d.date, pay: d.pay, notes: d.notes, trade });
+      UI.sel.verkauf = r.id; location.hash = "verkauf"; return r.message;
+    } });
+}
+async function changeStatus(kind, id, to) {
+  render();                                   // Auswahl zurücksetzen, bis der Wechsel bestätigt ist
+  if (kind === "offer") {
+    const o = byId("offers", id);
+    if (to === "bestellt") return convertOfferDialog(o);
+    return act(() => api("offerStatus", { id, status: to }));
+  }
+  if (kind === "sale") {
+    const s = byId("sales", id);
+    return ask("Verkauf stornieren", `${s.nr} wirklich stornieren? Die Buchung wird storniert. Das Fahrzeug geht zurück in den Bestand bzw. ist wieder für den Besteller reserviert.`, "Stornieren",
+      async () => done(await api("saleStatus", { id, status: to })));
+  }
+  const o = byId("orders", id), from = o.status;
+  if (to === "eingetroffen" && from === "bestellt") return receiveDialog(o);
+  if (to === "ausgeliefert") return deliverDialog(o);
+  const texts = {
+    "eingetroffen>bestellt": ["Fahrzeugeingang zurücknehmen", `Das Fahrzeug von ${o.nr} wird wieder aus dem Bestand genommen und die Bestellung ist wieder offen.`, "Zurücknehmen"],
+    "ausgeliefert>eingetroffen": ["Übergabe rückgängig machen", `Der Verkauf zu ${o.nr} wird storniert. Das Fahrzeug bleibt für den Kunden reserviert.`, "Verkauf stornieren"],
+    "storniert": ["Bestellung stornieren", `${o.nr} wirklich stornieren?` + (from === "eingetroffen" ? " Das Fahrzeug bleibt als Lagerfahrzeug im Bestand." : ""), "Stornieren"],
+  };
+  const t = texts[`${from}>${to}`] || texts[to];
+  if (t) return ask(t[0], t[1], t[2], async () => done(await api("orderStatus", { id, status: to })));
+  return act(() => api("orderStatus", { id, status: to }));
+}
+
 function purchaseDialog() {
   if (!S.customers.length) return toast("Bitte zuerst den Verkäufer unter Kunden anlegen.");
   form({ title: "Gebrauchtwagen ankaufen", wide: true,
@@ -527,7 +651,8 @@ function contractSale(s) {
   const v = byId("vehicles", s.vehicleId), c = byId("customers", s.customerId), tv = s.tradeId && byId("vehicles", s.tradeId);
   const rows = [["Kaufpreis", s.price, 1]];
   if (tv) rows.push(["abzgl. Inzahlungnahme " + tv.nr, s.tradeValue]);
-  rows.push([`Zahlbetrag (${PAY[s.pay]})`, s.price - s.tradeValue, 1]);
+  if (s.deposit) rows.push(["abzgl. geleistete Anzahlung", s.deposit]);
+  rows.push([`Restzahlung bei Übergabe (${PAY[s.pay]})`, s.price - s.tradeValue - s.deposit, 1]);
   info("Kaufvertrag " + s.nr, paperHead("Kaufvertrag", s.nr, s.date, c, "Käufer") + (s.status === "storno" ? `<div class="stamp">STORNIERT</div>` : "") +
     `<h4>Kaufgegenstand</h4>${vTable(v)}${tv ? `<h4>In Zahlung genommenes Fahrzeug</h4>${vTable(tv)}` : ""}<h4>Preis</h4>${sumTable(rows)}` +
     (s.notes ? `<p>Vereinbarungen: ${esc(s.notes)}</p>` : "") + `<p>Verkäufer: ${esc(s.seller)}</p><div class="sign"><div>Unterschrift Käufer</div><div>Unterschrift Verkäufer</div></div></div>` +
@@ -539,6 +664,13 @@ function contractPurchase(p) {
     `<h4>Fahrzeug</h4>${vTable(v)}<h4>Preis</h4>${sumTable([[`Ankaufpreis (${PAY[p.pay]})`, p.price, 1]])}${p.notes ? `<p>Vereinbarungen / Mängel: ${esc(p.notes)}</p>` : ""}
     <p style="font-size:11px;color:var(--ink-muted)">Der Verkäufer versichert, dass das Fahrzeug sein Eigentum ist, frei von Rechten Dritter ist und keine weiteren als die angegebenen Mängel bekannt sind.</p>
     <div class="sign"><div>Unterschrift Verkäufer</div><div>Unterschrift Ankäufer (${esc(p.buyer)})</div></div></div>`, true);
+}
+function contractOffer(o) {
+  const c = byId("customers", o.customerId), v = o.vehicleId && byId("vehicles", o.vehicleId), m = o.modelId && byId("models", o.modelId);
+  info("Angebot " + o.nr, paperHead("Angebot", o.nr, o.date, c, "Kunde") +
+    `<h4>Fahrzeug</h4>${v ? vTable(v) : `<table><tr><td>Modell</td><td>${esc(m ? m.model + " – " + m.make : "")}</td></tr>${m?.cat ? `<tr><td>Klasse</td><td>${esc(m.cat)}</td></tr>` : ""}${o.color ? `<tr><td>Farbe</td><td>${esc(o.color)}</td></tr>` : ""}</table>`}
+    <h4>Preis</h4>${sumTable([["Angebotspreis", o.price, 1]])}${o.validUntil ? `<p>Dieses Angebot ist gültig bis ${de(o.validUntil)}.</p>` : ""}${o.notes ? `<p>${esc(o.notes)}</p>` : ""}
+    <div class="sign"><div>Unterschrift Kunde</div><div>Unterschrift Autohaus</div></div></div>`, true);
 }
 function contractOrder(o) {
   const m = byId("models", o.modelId), c = o.customerId ? byId("customers", o.customerId) : { name: "Lagerbestellung", nr: "–" };
@@ -586,10 +718,16 @@ const ACTIONS = {
   cfToggle: () => { UI.cfOpen = !UI.cfOpen; render(); if (UI.cfOpen) $("#cf_make")?.focus(); },
   cfReset: () => { UI.cf = { ...CAT_FILTER }; render(); },
   mImport: importDialog,
+  aNew: () => offerDialog(null),
+  aEdit: () => { const o = selected("offers", "ein Angebot"); if (!o) return; if (o.status === "bestellt") return toast("Das Angebot ist bereits bestellt und kann nicht mehr geändert werden."); offerDialog(o); },
+  aDoc: () => { const o = selected("offers", "ein Angebot"); o && contractOffer(o); },
+  aDel: () => { const o = selected("offers", "ein Angebot"); o && ask("Angebot löschen", `Angebot ${o.nr} für ${esc(custName(o.customerId))} endgültig löschen?` + (o.orderId ? " Die daraus entstandene Bestellung bleibt erhalten." : ""), "Löschen", async () => done(await api("deleteOffer", { id: o.id }))); },
+  oDel: () => { const o = selected("orders", "eine Bestellung"); o && ask("Bestellung löschen", `Bestellung ${o.nr} endgültig löschen?` + (o.status === "eingetroffen" ? " Ein bestelltes Fahrzeug wird wieder aus dem Bestand genommen, ein Bestandsfahrzeug wird freigegeben." : "") + (S.offers.some(x => x.orderId === o.id) ? " Das zugehörige Angebot wird wieder auf „Offen“ gesetzt." : ""), "Löschen", async () => done(await api("deleteOrder", { id: o.id }))); },
+  kDel: () => { const s = selected("sales", "einen Verkauf"); s && ask("Verkauf löschen", `Verkauf ${s.nr} endgültig löschen?` + (s.status === "ok" ? " Der Verkauf wird dabei storniert: Buchung wird zurückgenommen, das Fahrzeug geht zurück in den Bestand." : ""), "Löschen", async () => done(await api("deleteSale", { id: s.id }))); },
   uNew: () => userDialog(null),
   uEdit: () => { const u = selected("users", "einen Benutzer"); u && userDialog(u); },
 };
-const DOUBLE = { bestand: "vEdit", ausstellung: "sMove", bestellungen: "oEdit", verkauf: "kDoc", ankauf: "pDoc", kunden: "cHist", katalog: "mEdit", benutzer: "uEdit" };
+const DOUBLE = { bestand: "vEdit", ausstellung: "sMove", angebote: "aEdit", bestellungen: "oEdit", verkauf: "kDoc", ankauf: "pDoc", kunden: "cHist", katalog: "mEdit", benutzer: "uEdit" };
 async function act(fn) { try { const r = await fn(); render(); r?.message && toast(r.message); } catch (e) { toast(e.message); } }
 
 document.addEventListener("click", e => {
@@ -599,7 +737,7 @@ document.addEventListener("click", e => {
   const tr = e.target.closest("#main tbody tr[data-id]");
   if (tr) { UI.sel[UI.view] = tr.dataset.id; document.querySelectorAll("#main tbody tr.sel").forEach(x => x.classList.remove("sel")); tr.classList.add("sel"); }
 });
-document.addEventListener("dblclick", e => { if (!e.target.closest("button") && e.target.closest("#main tbody tr[data-id]") && DOUBLE[UI.view]) ACTIONS[DOUBLE[UI.view]](); });
+document.addEventListener("dblclick", e => { if (!e.target.closest("button, select") && e.target.closest("#main tbody tr[data-id]") && DOUBLE[UI.view]) ACTIONS[DOUBLE[UI.view]](); });
 document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#ov") && $("#ov [data-a=close]")) close(); });
 document.addEventListener("input", e => {
   if (e.target.id === "q") { UI.q[UI.view] = e.target.value; const pos = e.target.selectionStart; render(); const q = $("#q"); q.focus(); q.setSelectionRange(pos, pos); }
@@ -615,6 +753,8 @@ document.addEventListener("change", e => {
   if (t.id === "fCond") { UI.filter.cond = t.value; render(); }
   if (t.id === "fOpen") { UI.filter.openOnly = t.checked; render(); }
   if (t.id === "fYear") { UI.filter.year = t.value; render(); }
+  if (t.id === "fOffer") { UI.filter.offer = t.value; render(); }
+  if (t.classList.contains("rowStatus")) changeStatus(t.dataset.kind, t.dataset.id, t.value);
 });
 document.addEventListener("submit", async e => {
   if (e.target.id !== "setForm") return;

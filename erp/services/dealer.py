@@ -494,7 +494,8 @@ def sell_vehicle(s: Session, data: dict) -> m.VehicleSale:
     ``trade_in_value``).
     """
     trade_in = data.get("trade_in")
-    data = _clean({k: v for k, v in data.items() if k != "trade_in"})
+    order_id = data.get("order_id")
+    data = _clean({k: v for k, v in data.items() if k not in ("trade_in", "order_id")})
     v = _get(s, m.Vehicle, data.get("vehicle_id"), "Fahrzeug")
     customer = _get(s, m.Customer, data.get("customer_id"), "Kunde")
     # Sperre gegen gleichzeitigen Verkauf desselben Fahrzeugs an zwei Arbeitsplätzen
@@ -517,18 +518,24 @@ def sell_vehicle(s: Session, data: dict) -> m.VehicleSale:
         net, tax = split_regular(price, rate)
         revenue_account = "8400"
 
+    deposit = Decimal(0)
+    if order_id:
+        order = _get(s, m.VehicleOrder, order_id, "Bestellung")
+        if order.vehicle_id != v.id:
+            raise BusinessError("Fahrzeug und Bestellung passen nicht zusammen")
+        deposit = Decimal(order.deposit or 0)
     sale = m.VehicleSale(number=next_number(s, "vehicle_sale"), vehicle_id=v.id, customer_id=customer.id,
                          sale_date=sale_date, price=price, purchase_price=v.purchase_price,
                          tax_amount=tax, payment_account=account, salesperson=context.username,
-                         notes=data.get("notes", ""))
+                         notes=data.get("notes", ""), order_id=order_id or None, deposit=deposit)
     s.add(sale)
     trade_value = Decimal(0)
     if trade_in:
         trade_value = parse_money(trade_in.get("trade_in_value"))
         if trade_value <= 0:
             raise BusinessError("Bitte den Anrechnungswert der Inzahlungnahme angeben")
-        if trade_value > price:
-            raise BusinessError("Der Anrechnungswert darf den Verkaufspreis nicht übersteigen")
+        if trade_value + deposit > price:
+            raise BusinessError("Anrechnungswert und Anzahlung dürfen den Verkaufspreis nicht übersteigen")
         tv = save_vehicle(s, None, {
             **{k: trade_in.get(k) for k in VEHICLE_FIELDS if trade_in.get(k) not in (None, "")},
             "condition": "used", "purchase_price": trade_value, "purchase_date": sale_date,
@@ -552,6 +559,9 @@ def sell_vehicle(s: Session, data: dict) -> m.VehicleSale:
     for o in s.scalars(select(m.VehicleOrder).where(m.VehicleOrder.vehicle_id == v.id,
                                                     m.VehicleOrder.status == "arrived")):
         o.status = "delivered"
+        if sale.order_id is None and o.customer_id == customer.id:
+            sale.order_id = o.id
+            sale.deposit = Decimal(o.deposit or 0)
     s.flush()
     audit(s, "sell", "vehicle_sale", sale.number, f"{v.number} {price}")
     return sale
@@ -575,6 +585,9 @@ def cancel_sale(s: Session, sale_id: int) -> m.VehicleSale:
     for o in s.scalars(select(m.VehicleOrder).where(m.VehicleOrder.vehicle_id == sale.vehicle_id,
                                                     m.VehicleOrder.status == "delivered")):
         o.status = "arrived"
+        if o.customer_id:              # Fahrzeug bleibt dem Besteller vorbehalten
+            sale.vehicle.status = "reserved"
+            sale.vehicle.reserved_for_id = o.customer_id
     s.flush()
     audit(s, "cancel", "vehicle_sale", sale.number)
     return sale
@@ -794,6 +807,8 @@ def sale_contract_html(s: Session, sale_id: int) -> str:
         tax_note = ""
     if x.trade_in_value:
         rows.append((f"abzgl. Inzahlungnahme {x.trade_in_vehicle.label}", x.trade_in_value, False))
+    if x.deposit:
+        rows.append(("abzgl. geleistete Anzahlung", x.deposit, False))
     rows.append((f"Zahlbetrag ({m.PAYMENT_ACCOUNTS.get(x.payment_account, '')})", x.payment_amount, True))
     storno = "<p style='color:#c00; font-size:14pt'><b>STORNIERT</b></p>" if x.status == "cancelled" else ""
     trade = ""
@@ -821,6 +836,14 @@ def purchase_contract_html(s: Session, purchase_id: int) -> str:
             + "</body></html>")
 
 
+def offer_html(s: Session, offer_id: int) -> str:
+    o = _get(s, m.Offer, offer_id, "Angebot")
+    exp = f"<p>Gültig bis: {o.valid_until:%d.%m.%Y}</p>" if o.valid_until else ""
+    return (_head(s, "Angebot", o.number, o.offer_date, o.customer, "Kunde") + "<h3>Fahrzeug</h3>"
+            + _vehicle_table(o.vehicle, o.model, o.color) + exp + _money_rows([("Angebotspreis", o.price, True)])
+            + (f"<p>{html.escape(o.notes)}</p>" if o.notes else "") + "</body></html>")
+
+
 def order_html(s: Session, order_id: int) -> str:
     o = _get(s, m.VehicleOrder, order_id, "Bestellung")
     if o.customer:
@@ -840,3 +863,240 @@ def order_html(s: Session, order_id: int) -> str:
     return (head + "<h3>Fahrzeug</h3>" + _vehicle_table(o.vehicle, o.model, o.color) + exp
             + _money_rows(rows) + (f"<p>{html.escape(o.notes)}</p>" if o.notes else "") + sign
             + "</body></html>")
+
+
+# --------------------------------------------------------------------------
+# Angebote und Statuswechsel  (Angebot -> Bestellung -> Verkauf)
+# --------------------------------------------------------------------------
+
+def save_offer(s: Session, offer_id: int | None, data: dict, version: int | None = None) -> m.Offer:
+    data = _clean(data)
+    customer = _get(s, m.Customer, data.get("customer_id"), "Kunde")
+    vehicle = s.get(m.Vehicle, data["vehicle_id"]) if data.get("vehicle_id") else None
+    model = s.get(m.VehicleModel, data["model_id"]) if data.get("model_id") else None
+    if vehicle is None and model is None:
+        raise BusinessError("Bitte ein Fahrzeug aus dem Bestand oder ein Katalogmodell wählen")
+    if vehicle is not None:
+        _require_status(vehicle, m.VEHICLE_AVAILABLE, "Angebot")
+        model = vehicle.model_ref
+    if offer_id:
+        o = _get(s, m.Offer, offer_id, "Angebot")
+        _check_version(o, version)
+        if o.status == "ordered":
+            raise BusinessError("Das Angebot ist bereits bestellt und kann nicht mehr geändert werden")
+    else:
+        o = m.Offer(number=next_number(s, "offer"), created_by=context.username, status="open")
+        s.add(o)
+    default_price = vehicle.list_price if vehicle is not None else model.sales_price
+    o.customer_id = customer.id
+    o.vehicle_id = vehicle.id if vehicle is not None else None
+    o.model_id = model.id if model is not None else None
+    o.color = data.get("color") or (vehicle.color if vehicle is not None else "")
+    o.price = data.get("price") or Decimal(default_price or 0)
+    if o.price <= 0:
+        raise BusinessError("Bitte einen Angebotspreis angeben")
+    o.offer_date = data.get("offer_date") or o.offer_date or dt.date.today()
+    o.valid_until = data.get("valid_until")
+    o.notes = data.get("notes", "")
+    s.flush()
+    audit(s, "update" if offer_id else "create", "offer", o.number, customer.name)
+    return o
+
+
+def _model_for_vehicle(s: Session, v: m.Vehicle) -> m.VehicleModel:
+    if v.model_ref is not None:
+        return v.model_ref
+    found = s.scalars(select(m.VehicleModel).where(func.lower(m.VehicleModel.make) == v.make.lower(),
+                                                   func.lower(m.VehicleModel.model) == v.model.lower())).first()
+    return found or save_model(s, None, {"make": v.make, "model": v.model, "category": v.category,
+                                         "purchase_price": v.purchase_price, "sales_price": v.list_price})
+
+
+def convert_offer(s: Session, offer_id: int, data: dict | None = None) -> m.VehicleOrder:
+    """Kunde hat bezahlt oder angezahlt: aus dem Angebot wird eine Bestellung.
+
+    Bei einem Fahrzeug aus dem Bestand ist es sofort „eingetroffen“ und für den Kunden reserviert.
+    """
+    data = _clean(data or {})
+    o = _get(s, m.Offer, offer_id, "Angebot")
+    if o.status == "ordered":
+        raise BusinessError("Das Angebot ist bereits bestellt")
+    deposit = data.get("deposit") or Decimal(0)
+    if deposit < 0 or deposit > o.price:
+        raise BusinessError("Die Anzahlung muss zwischen 0 und dem Angebotspreis liegen")
+    if o.vehicle is not None:
+        v = o.vehicle
+        _require_status(v, m.VEHICLE_AVAILABLE, "Bestellung")
+        if v.status == "reserved" and v.reserved_for_id not in (None, o.customer_id):
+            raise BusinessError(f"Das Fahrzeug ist bereits für {v.reserved_for.name} reserviert")
+        model = _model_for_vehicle(s, v)
+        order = save_order(s, None, {"model_id": model.id, "customer_id": o.customer_id, "color": v.color,
+                                     "purchase_price": v.purchase_price, "sales_price": o.price,
+                                     "deposit": deposit, "order_date": data.get("order_date"),
+                                     "notes": f"Aus Angebot {o.number} (Bestandsfahrzeug {v.number})"})
+        order.purchase_price = v.purchase_price
+        order.vehicle_id = v.id
+        order.arrival_date = data.get("order_date") or dt.date.today()
+        order.status = "arrived"
+        v.status = "reserved"
+        v.reserved_for_id = o.customer_id
+    else:
+        order = save_order(s, None, {"model_id": o.model_id, "customer_id": o.customer_id, "color": o.color,
+                                     "sales_price": o.price, "deposit": deposit,
+                                     "order_date": data.get("order_date"), "expected_date": data.get("expected_date"),
+                                     "notes": f"Aus Angebot {o.number}"})
+    o.status = "ordered"
+    o.order_id = order.id
+    s.flush()
+    audit(s, "convert", "offer", o.number, order.number)
+    return order
+
+
+def set_offer_status(s: Session, offer_id: int, status: str, data: dict | None = None):
+    o = _get(s, m.Offer, offer_id, "Angebot")
+    if status not in m.OFFER_STATUS:
+        raise BusinessError("Unbekannter Status")
+    if status == o.status:
+        return o
+    if status == "ordered":
+        return convert_offer(s, offer_id, data)
+    if o.status == "ordered":
+        raise BusinessError("Das Angebot ist bereits bestellt. Bitte die Bestellung stornieren oder löschen.")
+    o.status = status
+    s.flush()
+    audit(s, "status", "offer", o.number, status)
+    return o
+
+
+def delete_offer(s: Session, offer_id: int) -> str:
+    o = _get(s, m.Offer, offer_id, "Angebot")
+    number = o.number
+    s.delete(o)
+    s.flush()
+    audit(s, "delete", "offer", number)
+    return number
+
+
+def _undo_arrival(s: Session, o: m.VehicleOrder) -> None:
+    """Macht den Fahrzeugeingang einer Bestellung rückgängig (Fahrzeug wird ausgebucht)."""
+    v = o.vehicle
+    if v is None:
+        return
+    if v.status not in m.VEHICLE_AVAILABLE:
+        raise BusinessError(f"Das Fahrzeug {v.number} hat den Status '{m.VEHICLE_STATUS[v.status]}'")
+    if v.source != "order":
+        raise BusinessError("Das Fahrzeug stammt aus dem Bestand und wurde nicht bestellt. "
+                            "Bitte die Bestellung stornieren.")
+    if Decimal(o.purchase_price) > 0:
+        net, tax = split_regular(o.purchase_price, vat_rate(s))
+        finance.post(s, f"Storno Fahrzeugeingang {o.number}",
+                     [(finance.PAYABLES, o.purchase_price, 0), ("3400", 0, net), ("1576", 0, tax)], reference=o.number)
+    v.status = "removed"
+    v.reserved_for_id = None
+    v.showroom_since = None
+    v.notes = (v.notes + "\n" if v.notes else "") + f"Eingang von {o.number} zurückgenommen"
+    o.vehicle_id = None
+    o.arrival_date = None
+
+
+def _sale_of_order(s: Session, o: m.VehicleOrder) -> m.VehicleSale | None:
+    q = select(m.VehicleSale).where(m.VehicleSale.status == "done",
+                                    (m.VehicleSale.order_id == o.id) | (m.VehicleSale.vehicle_id == o.vehicle_id))
+    return s.scalars(q.order_by(m.VehicleSale.id.desc())).first()
+
+
+def set_order_status(s: Session, order_id: int, status: str, data: dict | None = None):
+    """Statuswechsel einer Bestellung. Liefert je nach Wechsel Fahrzeug, Verkauf oder Bestellung zurück."""
+    o = _get(s, m.VehicleOrder, order_id, "Bestellung")
+    if status not in m.VEHICLE_ORDER_STATUS:
+        raise BusinessError("Unbekannter Status")
+    cur = o.status
+    if status == cur:
+        return o
+    if (cur, status) == ("ordered", "arrived"):
+        return receive_order(s, order_id, data)
+    if status == "delivered":
+        if cur != "arrived":
+            raise BusinessError("Ausliefern geht erst, wenn das Fahrzeug eingetroffen ist")
+        d = dict(data or {})
+        d.update(vehicle_id=o.vehicle_id, customer_id=o.customer_id, order_id=o.id)
+        if not o.customer_id:
+            raise BusinessError("Lagerbestellung ohne Kunde: bitte das Fahrzeug über „Neuer Verkauf“ verkaufen")
+        if not d.get("price"):
+            d["price"] = o.sales_price
+        return sell_vehicle(s, d)
+    if (cur, status) == ("delivered", "arrived"):
+        sale = _sale_of_order(s, o)
+        if sale is None:
+            raise BusinessError("Zugehöriger Verkauf nicht gefunden")
+        cancel_sale(s, sale.id)
+        return o
+    if status == "cancelled":
+        if cur == "delivered":
+            raise BusinessError("Die Bestellung ist bereits ausgeliefert. Bitte zuerst den Verkauf stornieren.")
+        if cur == "arrived" and o.vehicle is not None and o.vehicle.status == "reserved" \
+                and o.vehicle.reserved_for_id == o.customer_id:
+            unreserve(s, o.vehicle_id)          # Fahrzeug bleibt als Lagerfahrzeug im Bestand
+        o.status = "cancelled"
+    elif status == "ordered":
+        if cur == "arrived":
+            _undo_arrival(s, o)
+        elif cur == "cancelled" and o.vehicle_id:
+            raise BusinessError("Die Bestellung hatte bereits ein Fahrzeug. Bitte eine neue Bestellung anlegen.")
+        elif cur == "delivered":
+            raise BusinessError("Die Bestellung ist bereits ausgeliefert. Bitte zuerst den Verkauf stornieren.")
+        o.status = "ordered"
+    elif status == "arrived" and cur == "cancelled":
+        if o.vehicle is None or o.vehicle.status not in ("stock", "showroom"):
+            raise BusinessError("Zu dieser Bestellung ist kein verfügbares Fahrzeug vorhanden")
+        if o.customer_id:
+            reserve(s, o.vehicle_id, o.customer_id)
+        o.status = "arrived"
+    else:
+        raise BusinessError("Dieser Statuswechsel ist nicht möglich")
+    s.flush()
+    audit(s, "status", "vehicle_order", o.number, f"{cur} -> {o.status}")
+    return o
+
+
+def delete_order(s: Session, order_id: int) -> str:
+    o = _get(s, m.VehicleOrder, order_id, "Bestellung")
+    if o.status == "delivered":
+        raise BusinessError("Die Bestellung ist bereits ausgeliefert. Bitte zuerst den Verkauf löschen.")
+    if o.status == "arrived":
+        if o.vehicle is not None and o.vehicle.source == "order":
+            _undo_arrival(s, o)
+        elif o.vehicle is not None and o.vehicle.status == "reserved":
+            unreserve(s, o.vehicle_id)
+    for offer in s.scalars(select(m.Offer).where(m.Offer.order_id == o.id)):
+        offer.order_id = None
+        offer.status = "open"
+    for sale in s.scalars(select(m.VehicleSale).where(m.VehicleSale.order_id == o.id)):
+        sale.order_id = None
+    number = o.number
+    s.flush()
+    s.delete(o)
+    s.flush()
+    audit(s, "delete", "vehicle_order", number)
+    return number
+
+
+def set_sale_status(s: Session, sale_id: int, status: str):
+    sale = _get(s, m.VehicleSale, sale_id, "Verkauf")
+    if status == sale.status:
+        return sale
+    if status == "cancelled":
+        return cancel_sale(s, sale_id)
+    raise BusinessError("Ein stornierter Verkauf kann nicht wieder aktiviert werden. Bitte einen neuen Verkauf anlegen.")
+
+
+def delete_sale(s: Session, sale_id: int) -> str:
+    """Löscht einen Verkauf. Ein abgeschlossener Verkauf wird vorher storniert (Gegenbuchung)."""
+    sale = _get(s, m.VehicleSale, sale_id, "Verkauf")
+    if sale.status == "done":
+        cancel_sale(s, sale_id)
+    number = sale.number
+    s.delete(sale)
+    s.flush()
+    audit(s, "delete", "vehicle_sale", number)
+    return number

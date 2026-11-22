@@ -207,3 +207,13 @@ td .btn.sm:hover { background: var(--gold); color: var(--on-gold); border-color:
   .sideLogo { width: 38px; height: 38px; }
   .brandRow .brand b { font-size: 11px; }
 }
+
+/* Status-Auswahl in Tabellenzeilen */
+select.rowStatus { padding: 3px 26px 3px 9px; font-size: 12px; font-weight: 600; border-radius: 12px; background-color: var(--bg); cursor: pointer; }
+select.rowStatus:disabled { cursor: default; opacity: 1; }
+select.rowStatus.st-offen, select.rowStatus.st-bestellt { color: var(--text); }
+select.rowStatus.st-eingetroffen { color: var(--gold-light); border-color: var(--gold-dark); }
+select.rowStatus.st-ausgeliefert, select.rowStatus.st-ok { color: var(--pos); border-color: #2b5a42; }
+select.rowStatus.st-storniert, select.rowStatus.st-storno, select.rowStatus.st-abgelehnt { color: var(--neg); border-color: #6b2f2b; }
+select.rowStatus.st-abgelaufen { color: var(--warn); border-color: #6b5221; }
+td:has(> select.rowStatus) { padding-block: 5px; }

@@ -39,7 +39,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.middleware.sessions import SessionMiddleware
 
 from .. import __version__, db, models as m
-from ..services import BusinessError, auth, dealer, get_setting, masterdata, set_setting, set_user
+from ..services import BusinessError, auth, context, dealer, get_setting, masterdata, set_setting, set_user
 
 log = logging.getLogger("erp.web")
 STATIC = Path(__file__).parent / "static"
@@ -49,6 +49,10 @@ DEFAULT_PASSWORD = "admin"
 V_STATUS = {"stock": "lager", "showroom": "ausstellung", "reserved": "reserviert", "sold": "verkauft",
             "removed": "ausgebucht"}
 O_STATUS = {"ordered": "bestellt", "arrived": "eingetroffen", "delivered": "ausgeliefert", "cancelled": "storniert"}
+O_STATUS_FROM_WEB = {v: k for k, v in O_STATUS.items()}
+OF_STATUS = {"open": "offen", "declined": "abgelehnt", "expired": "abgelaufen", "ordered": "bestellt"}
+OF_STATUS_FROM_WEB = {v: k for k, v in OF_STATUS.items()}
+D_STATUS_FROM_WEB = {"ok": "done", "storno": "cancelled"}
 D_STATUS = {"done": "ok", "cancelled": "storno"}
 PAY_TO_WEB = {"1200": "bank", "1000": "bar"}
 PAY_FROM_WEB = {v: k for k, v in PAY_TO_WEB.items()}
@@ -57,7 +61,7 @@ COND_FROM_WEB = {"neu": "new", "gebraucht": "used"}
 # Ansicht der Oberfläche -> Modul für die Rechteprüfung
 VIEW_MODULES = {
     "cockpit": "cockpit", "bestand": "vehicles", "ausstellung": "showroom", "bestellungen": "vehicle_orders",
-    "verkauf": "vehicle_sales", "ankauf": "used_purchases", "kunden": "customers", "katalog": "vehicle_models",
+    "angebote": "offers", "verkauf": "vehicle_sales", "ankauf": "used_purchases", "kunden": "customers", "katalog": "vehicle_models",
     "einstellungen": "admin", "benutzer": "admin",
 }
 
@@ -142,8 +146,13 @@ def state(s, user: m.User) -> dict:
                    "date": _date(x.sale_date), "price": _f(x.price), "ek": _f(x.purchase_price),
                    "tradeId": _s(x.trade_in_vehicle_id), "tradeValue": _f(x.trade_in_value),
                    "pay": PAY_TO_WEB.get(x.payment_account, "bank"), "status": D_STATUS.get(x.status, x.status),
-                   "seller": x.salesperson, "notes": x.notes}
+                   "seller": x.salesperson, "notes": x.notes, "orderId": _s(x.order_id), "deposit": _f(x.deposit)}
                   for x in s.scalars(select(m.VehicleSale))],
+        "offers": [{"id": _s(x.id), "nr": x.number, "customerId": _s(x.customer_id), "modelId": _s(x.model_id),
+                    "vehicleId": _s(x.vehicle_id), "color": x.color, "price": _f(x.price), "date": _date(x.offer_date),
+                    "validUntil": _date(x.valid_until), "status": OF_STATUS.get(x.status, x.status),
+                    "orderId": _s(x.order_id), "notes": x.notes, "createdBy": x.created_by}
+                   for x in s.scalars(select(m.Offer))],
         "purchases": [{"id": _s(x.id), "nr": x.number, "vehicleId": _s(x.vehicle_id), "customerId": _s(x.customer_id),
                        "date": _date(x.purchase_date), "price": _f(x.price),
                        "pay": PAY_TO_WEB.get(x.payment_account, "bank"), "status": D_STATUS.get(x.status, x.status),
@@ -274,6 +283,70 @@ def a_purchase(s, b):
     return {"id": _s(p.id), "message": f"Ankauf {p.number} gebucht. Das Fahrzeug steht im Bestand."}
 
 
+def a_save_offer(s, b):
+    oid = _id(b.get("id"))
+    o = dealer.save_offer(s, oid, {
+        "customer_id": _id(b.get("customerId")), "model_id": _id(b.get("modelId")), "vehicle_id": _id(b.get("vehicleId")),
+        "color": _str(b.get("color")), "price": b.get("price") or "", "offer_date": _pdate(b.get("date")),
+        "valid_until": _pdate(b.get("validUntil")), "notes": _str(b.get("notes"))})
+    return {"id": _s(o.id), "message": f"Angebot {o.number} gespeichert"}
+
+
+def a_offer_status(s, b):
+    status = OF_STATUS_FROM_WEB.get(b.get("status"))
+    if status is None:
+        raise BusinessError("Unbekannter Status")
+    res = dealer.set_offer_status(s, _id(b["id"]), status, {
+        "deposit": b.get("deposit") or "", "expected_date": _pdate(b.get("expected")), "order_date": _pdate(b.get("date"))})
+    if isinstance(res, m.VehicleOrder):
+        return {"id": _s(res.id), "message": f"Bestellung {res.number} angelegt"
+                + (" – Fahrzeug aus dem Bestand ist für den Kunden reserviert" if res.status == "arrived" else "")}
+    return {"message": "Status geändert"}
+
+
+def a_delete_offer(s, b):
+    return {"message": f"Angebot {dealer.delete_offer(s, _id(b['id']))} gelöscht"}
+
+
+def a_order_status(s, b):
+    status = O_STATUS_FROM_WEB.get(b.get("status"))
+    if status is None:
+        raise BusinessError("Unbekannter Status")
+    if status == "delivered" and not m.User(role=context.role).may("vehicle_sales"):
+        raise BusinessError("Ausliefern erzeugt einen Verkauf – dafür fehlt Ihrer Rolle die Berechtigung")
+    trade = None
+    if b.get("trade"):
+        t = b["trade"]
+        trade = {"make": _str(t.get("make")), "model": _str(t.get("model")), "plate": _str(t.get("plate")),
+                 "mileage": t.get("km") or 0, "trade_in_value": t.get("value") or "", "list_price": t.get("vk") or ""}
+    res = dealer.set_order_status(s, _id(b["id"]), status, {
+        "vin": _str(b.get("vin")), "plate": _str(b.get("plate")), "year": b.get("year") or 0, "mileage": b.get("km") or 0,
+        "arrival_date": _pdate(b.get("date")), "sale_date": _pdate(b.get("date")), "price": b.get("price") or "",
+        "payment_account": _pay(b.get("pay")), "notes": _str(b.get("notes")), "trade_in": trade})
+    if isinstance(res, m.VehicleSale):
+        return {"id": _s(res.id), "sale": True,
+                "message": f"Kaufvertrag {res.number} erstellt · Restzahlung {dealer.money(res.payment_amount)} €"}
+    if isinstance(res, m.Vehicle):
+        return {"message": f"Fahrzeug {res.number} ist im Bestand"}
+    return {"message": "Status geändert"}
+
+
+def a_delete_order(s, b):
+    return {"message": f"Bestellung {dealer.delete_order(s, _id(b['id']))} gelöscht"}
+
+
+def a_sale_status(s, b):
+    status = D_STATUS_FROM_WEB.get(b.get("status"))
+    if status is None:
+        raise BusinessError("Unbekannter Status")
+    dealer.set_sale_status(s, _id(b["id"]), status)
+    return {"message": "Verkauf storniert" if status == "cancelled" else "Status geändert"}
+
+
+def a_delete_sale(s, b):
+    return {"message": f"Verkauf {dealer.delete_sale(s, _id(b['id']))} gelöscht"}
+
+
 def a_cancel_purchase(s, b):
     dealer.cancel_purchase(s, _id(b["id"]))
     return {"message": "Ankauf storniert"}
@@ -335,6 +408,13 @@ ACTIONS: dict[str, tuple[str, Callable[[Any, dict], dict]]] = {
     "cancelSale": ("vehicle_sales", a_cancel_sale),
     "purchase": ("used_purchases", a_purchase),
     "cancelPurchase": ("used_purchases", a_cancel_purchase),
+    "saveOffer": ("offers", a_save_offer),
+    "offerStatus": ("offers", a_offer_status),
+    "deleteOffer": ("offers", a_delete_offer),
+    "orderStatus": ("vehicle_orders", a_order_status),
+    "deleteOrder": ("vehicle_orders", a_delete_order),
+    "saleStatus": ("vehicle_sales", a_sale_status),
+    "deleteSale": ("vehicle_sales", a_delete_sale),
     "saveCustomer": ("customers", a_save_customer),
     "saveModel": ("vehicle_models", a_save_model),
     "importModels": ("vehicle_models", a_import_models),

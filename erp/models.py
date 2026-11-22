@@ -54,6 +54,7 @@ MODULE_ROLES = {
     "vehicles": {"sales", "purchasing", "warehouse"},
     "showroom": {"sales", "warehouse"},
     "vehicle_models": {"sales", "purchasing"},
+    "offers": {"sales"},
     "vehicle_orders": {"sales", "purchasing"},
     "vehicle_sales": {"sales", "accounting"},
     "used_purchases": {"sales", "purchasing", "accounting"},
@@ -450,6 +451,8 @@ VEHICLE_ORDER_STATUS = {
 
 DEAL_STATUS = {"done": "Abgeschlossen", "cancelled": "Storniert"}
 
+OFFER_STATUS = {"open": "Offen", "declined": "Abgelehnt", "expired": "Abgelaufen", "ordered": "Bestellt"}
+
 
 class VehicleModel(Versioned, Base):
     """Fahrzeugkatalog: Modelle mit Standard-Einkaufs- und -Verkaufspreis."""
@@ -569,6 +572,9 @@ class VehicleSale(Versioned, Base):
     journal_entry_id: Mapped[int | None] = mapped_column(ForeignKey("journal_entries.id"))
     salesperson: Mapped[str] = mapped_column(String(50), default="")
     notes: Mapped[str] = mapped_column(Text, default="")
+    # Ab Version 1.3: Verkauf aus einer Bestellung mit bereits geleisteter Anzahlung
+    order_id: Mapped[int | None] = mapped_column(ForeignKey("vehicle_orders.id"), nullable=True)
+    deposit: Mapped[Decimal | None] = mapped_column(Money, nullable=True, default=Decimal("0"))
 
     vehicle: Mapped[Vehicle] = relationship(foreign_keys=[vehicle_id])
     trade_in_vehicle: Mapped[Vehicle | None] = relationship(foreign_keys=[trade_in_vehicle_id])
@@ -580,7 +586,8 @@ class VehicleSale(Versioned, Base):
 
     @property
     def payment_amount(self) -> Decimal:
-        return Decimal(self.price) - Decimal(self.trade_in_value or 0)
+        """Restzahlung bei Übergabe: Preis abzüglich Inzahlungnahme und Anzahlung."""
+        return Decimal(self.price) - Decimal(self.trade_in_value or 0) - Decimal(self.deposit or 0)
 
 
 class UsedPurchase(Versioned, Base):
@@ -600,3 +607,35 @@ class UsedPurchase(Versioned, Base):
 
     vehicle: Mapped[Vehicle] = relationship()
     customer: Mapped[Customer] = relationship()
+
+
+class Offer(Versioned, Base):
+    """Angebot an einen Kunden – für ein Katalogmodell oder ein Fahrzeug aus dem Bestand.
+
+    Ablauf: Angebot -> (Zahlung/Anzahlung) Bestellung -> (Übergabe, Restzahlung) Verkauf.
+    """
+    __tablename__ = "offers"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    number: Mapped[str] = mapped_column(String(20), unique=True)
+    customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id"))
+    model_id: Mapped[int | None] = mapped_column(ForeignKey("vehicle_models.id"))
+    vehicle_id: Mapped[int | None] = mapped_column(ForeignKey("vehicles.id"))
+    color: Mapped[str] = mapped_column(String(40), default="")
+    price: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"))
+    offer_date: Mapped[dt.date] = mapped_column(Date, default=dt.date.today)
+    valid_until: Mapped[dt.date | None] = mapped_column(Date)
+    status: Mapped[str] = mapped_column(String(20), default="open")
+    order_id: Mapped[int | None] = mapped_column(ForeignKey("vehicle_orders.id"))
+    notes: Mapped[str] = mapped_column(Text, default="")
+    created_by: Mapped[str] = mapped_column(String(50), default="")
+
+    customer: Mapped[Customer] = relationship()
+    model: Mapped[VehicleModel | None] = relationship()
+    vehicle: Mapped[Vehicle | None] = relationship()
+    order: Mapped[VehicleOrder | None] = relationship()
+
+    @property
+    def subject(self) -> str:
+        if self.vehicle is not None:
+            return self.vehicle.label
+        return self.model.name if self.model is not None else ""

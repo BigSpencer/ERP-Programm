@@ -112,3 +112,33 @@ def test_index_served(client):
     assert client.get("/static/app.js").headers["cache-control"] == "no-cache"
     assert client.get("/static/app.js").status_code == 200
     assert client.get("/healthz").json() == {"ok": True}
+
+
+def test_offer_order_sale_over_api(client):
+    login(client)
+    client.post("/api/password", json={"old": "admin", "new": "geheim123"})
+    mid = do(client, "saveModel", {"make": "Obey", "model": "9F", "ek": "95.000", "vk": "120.000", "active": True})["id"]
+    cid = do(client, "saveCustomer", {"name": "Testkunde"})["id"]
+    oid = do(client, "saveOffer", {"customerId": cid, "modelId": mid, "price": "", "validUntil": "2026-12-31"})["id"]
+    st = client.get("/api/state").json()
+    assert st["offers"][0]["status"] == "offen" and st["offers"][0]["price"] == 120000
+    r = do(client, "offerStatus", {"id": oid, "status": "bestellt", "deposit": "30.000"})
+    order_id = r["id"]
+    do(client, "orderStatus", {"id": order_id, "status": "eingetroffen", "vin": "W9F"})
+    r = do(client, "orderStatus", {"id": order_id, "status": "ausgeliefert", "pay": "bar"})
+    assert r["sale"] and "Restzahlung 90.000,00" in r["message"]
+    st = client.get("/api/state").json()
+    assert st["offers"][0]["status"] == "bestellt" and st["orders"][0]["status"] == "ausgeliefert"
+    sale = st["sales"][0]
+    assert sale["deposit"] == 30000 and sale["orderId"] == order_id and sale["status"] == "ok"
+    do(client, "deleteOrder", {"id": order_id}, 400)          # erst Verkauf löschen
+    do(client, "deleteSale", {"id": sale["id"]})
+    st = client.get("/api/state").json()
+    assert st["sales"] == [] and st["orders"][0]["status"] == "eingetroffen"
+    do(client, "orderStatus", {"id": order_id, "status": "bestellt"})
+    do(client, "deleteOrder", {"id": order_id})
+    st = client.get("/api/state").json()
+    assert st["orders"] == [] and st["offers"][0]["status"] == "offen"
+    do(client, "offerStatus", {"id": oid, "status": "abgelehnt"})
+    do(client, "deleteOffer", {"id": oid})
+    assert client.get("/api/state").json()["offers"] == []

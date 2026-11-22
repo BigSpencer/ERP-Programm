@@ -14,6 +14,8 @@ Kaufdaten**; diese werden ausschließlich im laufenden Betrieb in der eigenen Da
 | **Fahrzeugbestand** | Jedes Fahrzeug mit Nr. (FZ-…), Hersteller, Modell, Klasse, Zustand neu/gebraucht, FIN, Kennzeichen, Farbe, Baujahr, km, EK, VK, Marge, Standtage · Filter nach Status und Zustand · Reservieren für Kunden · Ausbuchen (z. B. Totalschaden) · doppelte FIN wird verhindert |
 | **Ausstellung** | Showroom-Übersicht nach Stellplatz, Fahrzeuge ausstellen/umstellen/herausnehmen, doppelt belegte Stellplätze werden verhindert, Ausstellungsdauer |
 | **Bestellungen** | Fahrzeugbestellung beim Hersteller – als Lagerfahrzeug oder Kundenbestellung mit vereinbartem Preis und Anzahlung · *Bestellt → Eingetroffen → Ausgeliefert* · bei Eingang wird das Fahrzeug automatisch angelegt und für den Kunden reserviert · Überfälligkeitsanzeige · Bestellbestätigung als PDF |
+| **Angebote** (nur Web) | Angebot für ein Katalogmodell oder ein Fahrzeug aus dem Bestand mit Preis und Gültigkeit · Status per Auswahl in der Zeile: *Offen / Abgelehnt / Abgelaufen / Bestellt* · „Bestellt“ fragt die (An-)Zahlung ab und legt die Bestellung an |
+| **Ablauf** | **Angebot → Bestellung → Verkauf**: Bestellung *Bestellt → Eingetroffen* (Fahrzeug wird eingebucht und reserviert) *→ Ausgeliefert* (Übergabe mit Restzahlung erzeugt den Kaufvertrag). Rückwärts-Wechsel und Löschen jeweils mit Bestätigung; abhängige Schritte werden sauber zurückgenommen |
 | **Verkauf** | Kaufvertrag (KV-…) mit Listen- oder Verhandlungspreis, Bar/Überweisung, optionaler Inzahlungnahme (Fahrzeug geht automatisch als Gebrauchtwagen in den Bestand) · Rohertrag je Verkauf · Storno mit Gegenbuchung · Kaufvertrag als PDF/Druck · Auswertung nach Verkäufer und Modell |
 | **Gebrauchtwagen-Ankauf** | Ankaufvertrag (AK-…) vom Kunden, Fahrzeug direkt im Bestand, Differenzbesteuerung (§ 25a UStG) · Storno · Ankaufvertrag als PDF/Druck |
 | **Fahrzeugkatalog** | Modelle mit Standard-EK und -VK, Marge in € und %, Bestand je Modell · **CSV-Import** (z. B. aus Google Sheets) |
@@ -149,7 +151,7 @@ ausführen (Netzfreigabe in `pg_hba.conf`/`postgresql.conf` beachten, siehe Date
 Der GitHub-Actions-Workflow baut bei jedem Push fertige Pakete
 (Actions → *Tests & Installer* → Artefakte):
 
-* Windows: `ERPDesk-Setup-1.2.0.exe` (Installer mit Startmenü- und Desktop-Verknüpfung)
+* Windows: `ERPDesk-Setup-1.3.0.exe` (Installer mit Startmenü- und Desktop-Verknüpfung)
 * macOS / Linux: Ordner `ERPDesk/` mit ausführbarer Datei
 
 Selbst bauen:

@@ -171,3 +171,78 @@ def test_kpis(s):
     k = dealer.kpis(s)
     assert k["sales_month_count"] == 1 and k["margin_month"] == Decimal("39000")
     assert dealer.monthly_sales(s)[-1][1] == Decimal("119000")
+
+
+# ---------------------------------------------------------------- Angebot -> Bestellung -> Verkauf
+
+def test_offer_order_sale_flow(s):
+    set_setting(s, "vehicle_vat_rate", "0")
+    model, cust = _base(s)
+    offer = dealer.save_offer(s, None, {"customer_id": cust.id, "model_id": model.id, "color": "Gold"})
+    assert offer.number == "AG-000001" and offer.price == Decimal("119000") and offer.status == "open"
+    order = dealer.set_offer_status(s, offer.id, "ordered", {"deposit": "20.000"})
+    assert offer.status == "ordered" and order.deposit == Decimal("20000") and order.status == "ordered"
+    assert order.sales_price == Decimal("119000") and order.customer_id == cust.id
+    with pytest.raises(BusinessError):
+        dealer.set_offer_status(s, offer.id, "declined")
+    v = dealer.set_order_status(s, order.id, "arrived", {"vin": "XYZ"})
+    assert v.status == "reserved" and v.reserved_for_id == cust.id
+    sale = dealer.set_order_status(s, order.id, "delivered", {"payment_account": "1000"})
+    assert order.status == "delivered" and sale.order_id == order.id and sale.deposit == Decimal("20000")
+    assert sale.payment_amount == Decimal("99000") and v.status == "sold"
+    # zurück: Verkauf storniert -> Bestellung wieder eingetroffen, Fahrzeug reserviert
+    dealer.set_order_status(s, order.id, "arrived")
+    assert sale.status == "cancelled" and order.status == "arrived" and v.status == "reserved"
+    # Eingang zurücknehmen -> Fahrzeug ausgebucht, Buchungen ausgeglichen
+    dealer.set_order_status(s, order.id, "ordered")
+    assert order.status == "ordered" and v.status == "removed" and order.vehicle_id is None
+    bal = _bal(s)
+    assert bal["1600"] == 0 and bal["3400"] == 0
+    dealer.delete_order(s, order.id)
+    assert offer.status == "open" and offer.order_id is None
+    dealer.delete_offer(s, offer.id)
+    assert s.query(m.Offer).count() == 0
+
+
+def test_offer_for_stock_vehicle(s):
+    model, cust = _base(s)
+    v = dealer.save_vehicle(s, None, {"make": "Ohne", "model": "Katalog", "list_price": "50.000",
+                                      "purchase_price": "40.000"})
+    offer = dealer.save_offer(s, None, {"customer_id": cust.id, "vehicle_id": v.id, "price": "48.000"})
+    order = dealer.convert_offer(s, offer.id, {"deposit": "48.000"})
+    assert order.status == "arrived" and order.vehicle_id == v.id and v.status == "reserved"
+    assert order.model.name == "Ohne Katalog"          # Modell wurde im Katalog ergänzt
+    with pytest.raises(BusinessError):                  # Bestandsfahrzeug: Eingang nicht zurücknehmbar
+        dealer.set_order_status(s, order.id, "ordered")
+    sale = dealer.set_order_status(s, order.id, "delivered", {})
+    assert sale.price == Decimal("48000") and sale.payment_amount == 0
+    with pytest.raises(BusinessError):
+        dealer.delete_order(s, order.id)
+    dealer.delete_sale(s, sale.id)                      # storniert und löscht
+    assert order.status == "arrived" and v.status == "reserved"
+    dealer.set_order_status(s, order.id, "cancelled")
+    assert v.status == "stock"
+
+
+def test_delete_completed_sale_reverses_booking(s):
+    model, cust = _base(s)
+    v = dealer.save_vehicle(s, None, {"model_id": model.id})
+    sale = dealer.sell_vehicle(s, {"vehicle_id": v.id, "customer_id": cust.id})
+    dealer.delete_sale(s, sale.id)
+    assert v.status == "stock" and s.query(m.VehicleSale).count() == 0
+    assert all(x == 0 for x in _bal(s).values())
+
+
+def test_add_missing_columns(db_url):
+    """Bestehende Datenbanken ohne die neuen Spalten werden beim Start ergänzt."""
+    from sqlalchemy import inspect, text
+    db.connect(db_url)
+    db.init_schema()
+    eng = db.engine()
+    if eng.dialect.name != "sqlite":
+        pytest.skip("Spalten entfernen nur mit SQLite getestet")
+    with eng.begin() as c:
+        c.execute(text("ALTER TABLE vehicle_sales DROP COLUMN deposit"))
+    assert "deposit" not in {c["name"] for c in inspect(eng).get_columns("vehicle_sales")}
+    assert db.add_missing_columns(eng) == ["vehicle_sales.deposit"]
+    assert "deposit" in {c["name"] for c in inspect(eng).get_columns("vehicle_sales")}
