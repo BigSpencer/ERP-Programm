@@ -29,7 +29,8 @@ def _suppliers(s):
 
 
 def _models(s):
-    return [(x.id, f"{x.name}  ·  VK {fmt_money(x.sales_price)} €") for x in dealer.search_models(s, only_active=True)]
+    models = sorted(dealer.search_models(s, only_active=True), key=lambda x: (x.model.lower(), x.make.lower()))
+    return [(x.id, f"{x.model} – {x.make}  ·  VK {fmt_money(x.sales_price)} €") for x in models]
 
 
 def _available(s, exclude_status=()):

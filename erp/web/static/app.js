@@ -349,11 +349,13 @@ function toast(t) {
   document.body.appendChild(el); setTimeout(() => el.remove(), 3500);
 }
 function opts(list, val, empty) { return (empty !== undefined ? `<option value="">${empty}</option>` : "") + list.map(([v, l]) => `<option value="${esc(v)}" ${String(v) === String(val ?? "") ? "selected" : ""}>${esc(l)}</option>`).join(""); }
-const modelOpts = () => S.models.filter(m => m.active).sort((a, b) => (a.make + a.model).localeCompare(b.make + b.model)).map(m => [m.id, `${m.make} ${m.model} · VK ${money(m.vk)}`]);
+const modelOpts = () => S.models.filter(m => m.active).sort((a, b) => (a.model + a.make).localeCompare(b.model + b.make, "de")).map(m => [m.id, `${m.model} – ${m.make} · VK ${money(m.vk)}`]);
 const custOpts = () => S.customers.filter(c => c.active !== false).sort((a, b) => a.name.localeCompare(b.name)).map(c => [c.id, c.name]);
 
 /* fields = [key, label, type, extra]; type: text|money|int|date|select|check|area|sec|calc|password */
-function form({ title, sub, fields, values = {}, submit = "Speichern", onSubmit, wide, onInput, noCancel }) {
+/* modelFill: welche Formularfelder bei Auswahl eines Katalogmodells befüllt werden, z. B. { make: "make", ek: "ek" }
+   (Formularfeld -> Feld des Katalogmodells). fillNow: auch beim Öffnen sofort befüllen (neue Datensätze). */
+function form({ title, sub, fields, values = {}, submit = "Speichern", onSubmit, wide, onInput, noCancel, modelFill, fillNow }) {
   const f = fields.map(([k, label, type, extra = {}]) => {
     const v = values[k] ?? "", id = "f_" + k, cls = extra.full ? "full" : "";
     if (type === "sec") return `<div class="sec eyebrow">${label}</div>`;
@@ -377,6 +379,22 @@ function form({ title, sub, fields, values = {}, submit = "Speichern", onSubmit,
     catch (err) { $("#err").textContent = err instanceof Fehler ? err.message : "Unerwarteter Fehler: " + err.message; if (!(err instanceof Fehler)) console.error(err); }
     finally { box.classList.remove("busy"); }
   });
+  if (modelFill && $("#f_modelId")) {
+    const fill = () => {
+      const m = byId("models", $("#f_modelId").value); if (!m) return;
+      for (const [field, src] of Object.entries(modelFill)) {
+        const el = $("#f_" + field); if (!el) continue;
+        const val = m[src];
+        if (el.tagName === "SELECT") {
+          if (val && ![...el.options].some(o => o.value === val)) el.add(new Option(val, val));
+          el.value = val || "";
+        } else el.value = typeof val === "number" ? num(val) : (val ?? "");
+      }
+      $("#f_modelId").dispatchEvent(new Event("input", { bubbles: true }));   // Vorschau aktualisieren
+    };
+    $("#f_modelId").addEventListener("change", fill);
+    if (fillNow) fill();
+  }
   if (onInput) { const run = () => { try { onInput(read()); } catch (e) { /* Vorschau ignoriert ungültige Eingaben */ } }; $("#mf").addEventListener("input", run); run(); }
 }
 function ask(title, text, okLabel, fn) {
@@ -395,7 +413,7 @@ const done = r => r.message;
 
 const vehicleFields = (isNew, locked) => [
   ["modelId", "Katalogmodell", "select", { options: modelOpts(), empty: "– ohne Katalog –", full: true }],
-  ["make", "Hersteller", "text", { hint: "leer = aus Katalog" }], ["model", "Modell", "text", { hint: "leer = aus Katalog" }],
+  ["model", "Modell", "text", { hint: "leer = aus Katalog" }], ["make", "Hersteller", "text", { hint: "leer = aus Katalog" }],
   ["cat", "Klasse", "select", { options: CATS.map(c => [c, c]), empty: "–" }], ["cond", "Zustand", "select", { options: [["neu", "Neu"], ["gebraucht", "Gebraucht"]] }],
   ["color", "Farbe"], ["plate", "Kennzeichen"], ["vin", "Fahrgestellnummer (FIN)"], ["year", "Baujahr", "int"], ["km", "Kilometerstand", "int"],
   ["inDate", "Eingangsdatum", "date"], ["ek", "Einkaufspreis (brutto)" + (locked ? " · fest" : ""), "money", { hint: isNew ? "leer = Katalogpreis" : "" }],
@@ -403,7 +421,8 @@ const vehicleFields = (isNew, locked) => [
   ["margin", "Differenzbesteuerung (§ 25a UStG)", "check"], ["notes", "Notizen", "area"]];
 
 function vehicleDialog(v) {
-  form({ title: v ? `Fahrzeug ${v.nr} bearbeiten` : "Neues Fahrzeug", sub: v ? esc(vName(v)) : "Hersteller, Modell und Preise werden aus dem Katalog übernommen, wenn die Felder leer bleiben.",
+  form({ title: v ? `Fahrzeug ${v.nr} bearbeiten` : "Neues Fahrzeug", sub: v ? esc(vName(v)) : "Wähle ein Katalogmodell: Modell, Hersteller, Klasse und Preise werden übernommen und können angepasst werden.",
+    modelFill: { make: "make", model: "model", cat: "cat", ek: "ek", vk: "vk" },
     fields: vehicleFields(!v, v && ["verkauft", "ausgebucht"].includes(v.status)),
     values: v ? { ...v } : { cond: "neu", year: new Date().getFullYear(), inDate: today() },
     onSubmit: async d => { const r = await api("saveVehicle", { ...d, id: v?.id }); UI.sel.bestand = r.id; return r.message; } });
@@ -449,16 +468,18 @@ function orderDialog(o, preset = {}) {
     fields: [["modelId", "Modell (Katalog)", "select", { options: modelOpts(), full: true }], ["color", "Farbe / Ausstattung"], ["customerId", "Für Kunde", "select", { options: custOpts(), empty: "– Lagerfahrzeug –" }],
       ["ek", "Einkaufspreis (brutto)", "money", { hint: "leer = Katalogpreis" }], ["vk", "Vereinbarter Verkaufspreis", "money", { hint: "leer = Katalogpreis" }],
       ["deposit", "Anzahlung des Kunden", "money"], ["date", "Bestelldatum", "date"], ["expected", "Voraussichtliche Lieferung", "date"], ["notes", "Notizen", "area"]],
+    modelFill: { ek: "ek", vk: "vk" }, fillNow: !o,
     values: o ? { ...o } : { date: today(), ...preset }, onSubmit: async d => { const r = await api("saveOrder", { ...d, id: o?.id }); UI.sel.bestellungen = r.id; return r.message; } });
 }
 function purchaseDialog() {
   if (!S.customers.length) return toast("Bitte zuerst den Verkäufer unter Kunden anlegen.");
   form({ title: "Gebrauchtwagen ankaufen", wide: true,
     fields: [["customerId", "Verkäufer (Kunde)", "select", { options: custOpts() }], ["modelId", "Katalogmodell (optional)", "select", { options: modelOpts(), empty: "– ohne Katalog –" }],
-      ["make", "Hersteller", "text", { hint: "leer = aus Katalog" }], ["model", "Modell", "text", { hint: "leer = aus Katalog" }], ["cat", "Klasse", "select", { options: CATS.map(c => [c, c]), empty: "–" }],
+      ["model", "Modell", "text", { hint: "leer = aus Katalog" }], ["make", "Hersteller", "text", { hint: "leer = aus Katalog" }], ["cat", "Klasse", "select", { options: CATS.map(c => [c, c]), empty: "–" }],
       ["color", "Farbe"], ["plate", "Kennzeichen"], ["vin", "Fahrgestellnummer (FIN)"], ["year", "Baujahr", "int"], ["km", "Kilometerstand", "int"],
       ["price", "Ankaufpreis", "money"], ["vk", "Geplanter Verkaufspreis", "money"], ["pay", "Zahlungsart", "select", { options: Object.entries(PAY) }], ["date", "Ankaufdatum", "date"],
       ["margin", "Differenzbesteuerung (Ankauf von Privat)", "check"], ["pnotes", "Vereinbarungen / bekannte Mängel", "area"]],
+    modelFill: { make: "make", model: "model", cat: "cat" },
     values: { date: today(), pay: "bank", margin: true }, submit: "Ankauf buchen",
     onSubmit: async d => { const r = await api("purchase", d); UI.sel.ankauf = r.id; return r.message; } });
 }
@@ -468,7 +489,7 @@ function customerDialog(c) {
     values: c || {}, onSubmit: async d => { const r = await api("saveCustomer", { ...d, id: c?.id }); UI.sel.kunden = r.id; return r.message; } });
 }
 function modelDialog(m) {
-  form({ title: m ? "Modell bearbeiten" : "Neues Modell", fields: [["make", "Hersteller / Marke"], ["model", "Modell"], ["cat", "Klasse", "select", { options: CATS.map(c => [c, c]), empty: "–" }],
+  form({ title: m ? "Modell bearbeiten" : "Neues Modell", fields: [["model", "Modell"], ["make", "Hersteller / Marke"], ["cat", "Klasse", "select", { options: CATS.map(c => [c, c]), empty: "–" }],
     ["ek", "Einkaufspreis (brutto)", "money"], ["vk", "Verkaufspreis (brutto)", "money"], ["active", "Aktiv", "check"]],
     values: m || { active: true }, onSubmit: async d => { const r = await api("saveModel", { ...d, id: m?.id }); UI.sel.katalog = r.id; return r.message; } });
 }
