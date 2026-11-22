@@ -246,3 +246,34 @@ def test_add_missing_columns(db_url):
     assert "deposit" not in {c["name"] for c in inspect(eng).get_columns("vehicle_sales")}
     assert db.add_missing_columns(eng) == ["vehicle_sales.deposit"]
     assert "deposit" in {c["name"] for c in inspect(eng).get_columns("vehicle_sales")}
+
+
+def test_trade_in_from_purchase(s):
+    set_setting(s, "vehicle_vat_rate", "0")
+    model, cust = _base(s)
+    v = dealer.save_vehicle(s, None, {"model_id": model.id})
+    ti = dealer.purchase_used(s, {"customer_id": cust.id, "make": "Alt", "model": "Coupé", "plate": "LS-1",
+                                  "price": "15.000", "status": "trade_in"})
+    assert ti.status == "trade_in" and ti.vehicle.status == "pending" and ti.journal_entry_id is None
+    assert ti.vehicle not in dealer.available_vehicles(s)          # noch nicht verkaufbar
+    assert [x.id for x in dealer.open_trade_ins(s, cust.id)] == [ti.id]
+    sale = dealer.sell_vehicle(s, {"vehicle_id": v.id, "customer_id": cust.id, "trade_in_purchase_id": ti.id})
+    assert ti.status == "settled" and ti.sale_id == sale.id and ti.vehicle.status == "stock"
+    assert sale.trade_in_value == Decimal("15000") and sale.payment_amount == Decimal("104000")
+    bal = _bal(s)
+    assert bal["1200"] == Decimal("104000") and bal["3200"] == Decimal("15000")
+    with pytest.raises(BusinessError):                             # schon verrechnet
+        dealer.cancel_purchase(s, ti.id)
+    dealer.cancel_sale(s, sale.id)                                 # Inzahlungnahme wieder offen
+    assert ti.status == "trade_in" and ti.sale_id is None and ti.vehicle.status == "pending"
+    assert all(x == 0 for x in _bal(s).values())
+    dealer.set_purchase_status(s, ti.id, "done", {"payment_account": "1000"})   # doch ausbezahlt
+    assert ti.status == "done" and ti.vehicle.status == "stock" and _bal(s)["1000"] == Decimal("-15000")
+
+
+def test_trade_in_cancel_without_booking(s):
+    _, cust = _base(s)
+    ti = dealer.purchase_used(s, {"customer_id": cust.id, "make": "A", "model": "B", "price": "1000", "status": "trade_in"})
+    dealer.cancel_purchase(s, ti.id)
+    assert ti.status == "cancelled" and ti.vehicle.status == "removed"
+    assert all(x == 0 for x in _bal(s).values())

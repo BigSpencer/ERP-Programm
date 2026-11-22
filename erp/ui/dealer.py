@@ -809,7 +809,8 @@ class UsedPurchasesPage(ListPage):
             v = x.vehicle
             rows.append((x.id, [x.number, dcell(x.purchase_date), f"{v.number} {v.name}", v.plate,
                                 _int_cell(v.mileage), x.customer.name, num(x.price), num(v.list_price),
-                                m.VEHICLE_STATUS.get(v.status, v.status), x.buyer, m.DEAL_STATUS[x.status]]))
+                                m.VEHICLE_STATUS.get(v.status, v.status), x.buyer,
+                                m.PURCHASE_STATUS.get(x.status, x.status)]))
         return rows
 
     def create(self):

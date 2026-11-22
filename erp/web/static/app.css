@@ -217,3 +217,6 @@ select.rowStatus.st-ausgeliefert, select.rowStatus.st-ok { color: var(--pos); bo
 select.rowStatus.st-storniert, select.rowStatus.st-storno, select.rowStatus.st-abgelehnt { color: var(--neg); border-color: #6b2f2b; }
 select.rowStatus.st-abgelaufen { color: var(--warn); border-color: #6b5221; }
 td:has(> select.rowStatus) { padding-block: 5px; }
+select.rowStatus.st-inzahlungnahme { color: var(--warn); border-color: #6b5221; }
+select.rowStatus.st-angekauft, select.rowStatus.st-verrechnet { color: var(--pos); border-color: #2b5a42; }
+.pill.inzahlung { color: var(--warn); border-color: #6b5221; }

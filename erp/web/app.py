@@ -47,7 +47,9 @@ DEFAULT_PASSWORD = "admin"
 
 # Interne Schlüssel <-> Schlüssel der Oberfläche
 V_STATUS = {"stock": "lager", "showroom": "ausstellung", "reserved": "reserviert", "sold": "verkauft",
-            "removed": "ausgebucht"}
+            "removed": "ausgebucht", "pending": "inzahlung"}
+P_STATUS = {"done": "angekauft", "trade_in": "inzahlungnahme", "settled": "verrechnet", "cancelled": "storniert"}
+P_STATUS_FROM_WEB = {v: k for k, v in P_STATUS.items()}
 O_STATUS = {"ordered": "bestellt", "arrived": "eingetroffen", "delivered": "ausgeliefert", "cancelled": "storniert"}
 O_STATUS_FROM_WEB = {v: k for k, v in O_STATUS.items()}
 OF_STATUS = {"open": "offen", "declined": "abgelehnt", "expired": "abgelaufen", "ordered": "bestellt"}
@@ -155,8 +157,8 @@ def state(s, user: m.User) -> dict:
                    for x in s.scalars(select(m.Offer))],
         "purchases": [{"id": _s(x.id), "nr": x.number, "vehicleId": _s(x.vehicle_id), "customerId": _s(x.customer_id),
                        "date": _date(x.purchase_date), "price": _f(x.price),
-                       "pay": PAY_TO_WEB.get(x.payment_account, "bank"), "status": D_STATUS.get(x.status, x.status),
-                       "buyer": x.buyer, "notes": x.notes}
+                       "pay": PAY_TO_WEB.get(x.payment_account, "bank"), "status": P_STATUS.get(x.status, x.status),
+                       "buyer": x.buyer, "notes": x.notes, "saleId": _s(x.sale_id)}
                       for x in s.scalars(select(m.UsedPurchase))],
         "customers": [{"id": _s(c.id), "nr": c.number, "name": c.name, "phone": c.phone, "email": c.email,
                        "notes": c.notes, "active": c.active}
@@ -262,7 +264,8 @@ def a_sell(s, b):
     sale = dealer.sell_vehicle(s, {
         "vehicle_id": _id(b.get("vehicleId")), "customer_id": _id(b.get("customerId")),
         "sale_date": _pdate(b.get("date")), "price": b.get("price") or "", "payment_account": _pay(b.get("pay")),
-        "notes": _str(b.get("notes")), "trade_in": trade})
+        "notes": _str(b.get("notes")), "trade_in": trade,
+        "trade_in_purchase_id": _id(b.get("tradePurchaseId"))})
     return {"id": _s(sale.id), "message": f"Kaufvertrag {sale.number} erstellt · Rohertrag "
                                           f"{dealer.money(sale.margin)} €"}
 
@@ -279,8 +282,20 @@ def a_purchase(s, b):
         "vin": _str(b.get("vin")), "plate": _str(b.get("plate")), "year": b.get("year") or 0,
         "mileage": b.get("km") or 0, "price": b.get("price") or "", "list_price": b.get("vk") or "",
         "payment_account": _pay(b.get("pay")), "purchase_date": _pdate(b.get("date")),
-        "purchase_notes": _str(b.get("pnotes"))})
+        "purchase_notes": _str(b.get("pnotes")),
+        "status": P_STATUS_FROM_WEB.get(b.get("status") or "angekauft", "done")})
+    if p.status == "trade_in":
+        return {"id": _s(p.id), "message": f"Inzahlungnahme {p.number} erfasst. Sie kann jetzt bei einem Verkauf ausgewählt werden."}
     return {"id": _s(p.id), "message": f"Ankauf {p.number} gebucht. Das Fahrzeug steht im Bestand."}
+
+
+def a_purchase_status(s, b):
+    status = P_STATUS_FROM_WEB.get(b.get("status"))
+    if status is None:
+        raise BusinessError("Unbekannter Status")
+    dealer.set_purchase_status(s, _id(b["id"]), status, {"payment_account": _pay(b.get("pay"))})
+    return {"message": {"done": "Ankauf gebucht – das Fahrzeug steht im Bestand",
+                        "cancelled": "Storniert"}.get(status, "Status geändert")}
 
 
 def a_save_offer(s, b):
@@ -322,7 +337,8 @@ def a_order_status(s, b):
     res = dealer.set_order_status(s, _id(b["id"]), status, {
         "vin": _str(b.get("vin")), "plate": _str(b.get("plate")), "year": b.get("year") or 0, "mileage": b.get("km") or 0,
         "arrival_date": _pdate(b.get("date")), "sale_date": _pdate(b.get("date")), "price": b.get("price") or "",
-        "payment_account": _pay(b.get("pay")), "notes": _str(b.get("notes")), "trade_in": trade})
+        "payment_account": _pay(b.get("pay")), "notes": _str(b.get("notes")), "trade_in": trade,
+        "trade_in_purchase_id": _id(b.get("tradePurchaseId"))})
     if isinstance(res, m.VehicleSale):
         return {"id": _s(res.id), "sale": True,
                 "message": f"Kaufvertrag {res.number} erstellt · Restzahlung {dealer.money(res.payment_amount)} €"}
@@ -408,6 +424,7 @@ ACTIONS: dict[str, tuple[str, Callable[[Any, dict], dict]]] = {
     "cancelSale": ("vehicle_sales", a_cancel_sale),
     "purchase": ("used_purchases", a_purchase),
     "cancelPurchase": ("used_purchases", a_cancel_purchase),
+    "purchaseStatus": ("used_purchases", a_purchase_status),
     "saveOffer": ("offers", a_save_offer),
     "offerStatus": ("offers", a_offer_status),
     "deleteOffer": ("offers", a_delete_offer),

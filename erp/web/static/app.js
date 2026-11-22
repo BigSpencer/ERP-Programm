@@ -53,7 +53,8 @@ async function reload() {
 async function api(name, body) { const r = await request("/api/action/" + name, body); await reload(); return r; }
 
 /* ------------------------------------------------------------------ Begriffe */
-const STATUS = { lager: "Lager", ausstellung: "Ausstellung", reserviert: "Reserviert", verkauft: "Verkauft", ausgebucht: "Ausgebucht" };
+const STATUS = { lager: "Lager", ausstellung: "Ausstellung", reserviert: "Reserviert", verkauft: "Verkauft", ausgebucht: "Ausgebucht", inzahlung: "Inzahlungnahme offen" };
+const PURCHASE_STATUS = { angekauft: "Angekauft", inzahlungnahme: "Inzahlungnahme", verrechnet: "Verrechnet", storniert: "Storniert" };
 const AVAILABLE = ["lager", "ausstellung", "reserviert"];
 const ORDER_STATUS = { bestellt: "Bestellt", eingetroffen: "Eingetroffen", ausgeliefert: "Ausgeliefert", storniert: "Storniert" };
 const OFFER_STATUS = { offen: "Offen", abgelehnt: "Abgelehnt", abgelaufen: "Abgelaufen", bestellt: "Bestellt" };
@@ -73,7 +74,7 @@ function history(cid) {
     out.push([s.date, "Kauf" + (s.status === "storno" ? " (storniert)" : ""), s.nr, vLabel(byId("vehicles", s.vehicleId)), s.price]);
     if (s.tradeId) out.push([s.date, "Inzahlungnahme", s.nr, vLabel(byId("vehicles", s.tradeId)), s.tradeValue]);
   });
-  S.purchases.filter(p => p.customerId === cid).forEach(p => out.push([p.date, "Ankauf von Kunde" + (p.status === "storno" ? " (storniert)" : ""), p.nr, vLabel(byId("vehicles", p.vehicleId)), p.price]));
+  S.purchases.filter(p => p.customerId === cid).forEach(p => out.push([p.date, (["inzahlungnahme", "verrechnet"].includes(p.status) ? "Inzahlungnahme" : "Ankauf von Kunde") + ` (${PURCHASE_STATUS[p.status]})`, p.nr, vLabel(byId("vehicles", p.vehicleId)), p.price]));
   S.offers.filter(o => o.customerId === cid).forEach(o => out.push([o.date, `Angebot (${OFFER_STATUS[o.status]})`, o.nr, offerSubject(o), o.price]));
   S.orders.filter(o => o.customerId === cid).forEach(o => { const m = byId("models", o.modelId); out.push([o.date, `Bestellung (${ORDER_STATUS[o.status]})`, o.nr, (m ? m.make + " " + m.model : "") + (o.color ? ", " + o.color : ""), o.vk]); });
   S.vehicles.filter(v => v.resFor === cid && v.status === "reserviert").forEach(v => out.push([v.resUntil || today(), "Reservierung", v.nr, vLabel(v), v.vk]));
@@ -299,14 +300,25 @@ function verkauf() {
 }
 
 /* Ankauf */
+function purchaseNext(p) {
+  const v = byId("vehicles", p.vehicleId);
+  if (p.status === "inzahlungnahme") return ["angekauft", "storniert"];
+  if (p.status === "angekauft") return v && ["lager", "ausstellung"].includes(v.status) ? ["storniert"] : [];
+  return [];
+}
 function ankauf() {
-  const list = S.purchases.filter(p => { const v = byId("vehicles", p.vehicleId) || {}; return match([p.nr, custName(p.customerId), v.make, v.model, v.plate, v.vin].join(" ")); }).sort((a, b) => b.nr.localeCompare(a.nr));
-  return head("Autohaus", "Gebrauchtwagen-Ankauf", "Fahrzeuge von Kunden ankaufen. Das Fahrzeug steht danach sofort im Bestand.") +
-    `<div class="bar">${searchBox("Ankauf, Verkäufer, Kennzeichen …")}<span class="grow"></span>${btn("pNew", "Neuer Ankauf", "primary")}${btn("pDoc", "Ankaufvertrag ansehen")}${btn("pCancel", "Stornieren", "danger")}</div>` +
-    tbl([["Nr."], ["Datum"], ["Fahrzeug"], ["Kennzeichen"], ["km", 1], ["Verkäufer"], ["Ankaufpreis", 1], ["Geplanter VK", 1], ["Fahrzeugstatus"], ["Ankäufer", 0, 1], ["Status"]],
-      list.map(p => { const v = byId("vehicles", p.vehicleId); return { id: p.id, cells: [p.nr, de(p.date), esc(v.nr + " " + vName(v)), esc(v.plate), intf.format(v.km), esc(custName(p.customerId)), num(p.price), num(v.vk),
-        pill(v.status, STATUS[v.status]), esc(p.buyer), pill(p.status, p.status === "ok" ? "Abgeschlossen" : "Storniert")] }; }), "Noch keine Ankäufe") +
-    `<p class="foot">Inzahlungnahmen aus Verkäufen erscheinen direkt im Fahrzeugbestand.</p>`;
+  const f = UI.filter.purchase || "";
+  const list = S.purchases.filter(p => { const v = byId("vehicles", p.vehicleId) || {}; return (!f || p.status === f) && match([p.nr, custName(p.customerId), v.make, v.model, v.plate, v.vin].join(" ")); }).sort((a, b) => b.nr.localeCompare(a.nr));
+  const open = S.purchases.filter(p => p.status === "inzahlungnahme");
+  return head("Autohaus", "Gebrauchtwagen-Ankauf", "Ankauf: Fahrzeug wird sofort bezahlt und steht im Bestand. Inzahlungnahme: Fahrzeug wird vorgemerkt und bei der Übergabe eines verkauften Fahrzeugs verrechnet.") +
+    `<div class="bar">${searchBox("Ankauf, Verkäufer, Kennzeichen …")}<select id="fPurchase" aria-label="Status"><option value="">Alle</option>${Object.entries(PURCHASE_STATUS).map(([k, l]) => `<option value="${k}" ${f === k ? "selected" : ""}>${l}</option>`).join("")}</select>
+    <span class="grow"></span>${btn("pNew", "Neuer Ankauf", "primary")}${btn("pDoc", "Vertrag ansehen")}</div>` +
+    tbl([["Nr."], ["Datum"], ["Fahrzeug"], ["Kennzeichen"], ["km", 1], ["Kunde"], ["Preis / Anrechnung", 1], ["Geplanter VK", 1], ["Status"], ["Fahrzeugstatus"], ["Verrechnet mit", 0, 1]],
+      list.map(p => { const v = byId("vehicles", p.vehicleId), sale = p.saleId && byId("sales", p.saleId);
+        return { id: p.id, cells: [p.nr, de(p.date), esc(v.nr + " " + vName(v)), esc(v.plate), intf.format(v.km), esc(custName(p.customerId)), num(p.price), num(v.vk),
+          statusSelect("purchase", p.id, p.status, PURCHASE_STATUS, purchaseNext(p)), pill(v.status, STATUS[v.status]), sale ? sale.nr : ""] }; }),
+      S.purchases.length ? "Keine Einträge für diesen Filter" : "Noch keine Ankäufe") +
+    `<div class="foot">${list.length} Eintrag/Einträge${open.length ? ` · ${open.length} offene Inzahlungnahme(n) über ${money(open.reduce((a, p) => a + p.price, 0))}` : ""}</div>`;
 }
 
 /* Kunden */
@@ -487,18 +499,16 @@ function saleDialog(v) {
   form({ title: "Fahrzeug verkaufen", sub: "Der Kaufvertrag wird sofort erstellt. Bei Inzahlungnahme kommt das Altfahrzeug automatisch in den Bestand.", wide: true,
     fields: [["vehicleId", "Fahrzeug", "select", { options: list, full: true }], ["customerId", "Käufer", "select", { options: custOpts() }], ["date", "Verkaufsdatum", "date"],
       ["price", "Verkaufspreis", "money", { hint: "leer = Listenpreis" }], ["pay", "Zahlungsart", "select", { options: Object.entries(PAY) }],
-      ["hasTrade", "Fahrzeug wird in Zahlung genommen", "check"],
-      ["sec1", "Inzahlungnahme (nur wenn angehakt)", "sec"], ["tMake", "Hersteller"], ["tModel", "Modell"], ["tPlate", "Kennzeichen"], ["tKm", "Kilometerstand", "int"],
-      ["tValue", "Anrechnungswert", "money"], ["tVk", "Geplanter Wiederverkaufspreis", "money"], ["c", "", "calc"], ["notes", "Vereinbarungen", "area"]],
+      ["tradePurchaseId", "Inzahlungnahme", "select", { options: tradeOpts(v?.resFor), empty: tradeOpts().length ? "– keine –" : "– keine offene Inzahlungnahme erfasst –", full: true }],
+      ["c", "", "calc"], ["notes", "Vereinbarungen", "area"]],
     values: { vehicleId: v?.id, customerId: v?.resFor || "", date: today(), pay: "bank" }, submit: "Verkauf abschließen",
     onInput: d => {
       const x = byId("vehicles", d.vehicleId); if (!x) return;
-      const price = d.price === "" ? x.vk : parseMoney(d.price), tv = d.hasTrade ? parseMoney(d.tValue) : 0;
+      const price = d.price === "" ? x.vk : parseMoney(d.price), tv = byId("purchases", d.tradePurchaseId)?.price || 0;
       $("#calc").innerHTML = `Kaufpreis <b>${money(price)}</b> · EK ${money(x.ek)} · Rohertrag <b>${money(price - x.ek)}</b>${tv ? ` · abzgl. Inzahlungnahme ${money(tv)}` : ""} · Zahlbetrag <b>${money(price - tv)}</b>`;
     },
     onSubmit: async d => {
-      const trade = d.hasTrade ? { make: d.tMake, model: d.tModel, plate: d.tPlate, km: d.tKm, value: d.tValue, vk: d.tVk } : null;
-      const r = await api("sell", { vehicleId: d.vehicleId, customerId: d.customerId, date: d.date, price: d.price, pay: d.pay, notes: d.notes, trade });
+      const r = await api("sell", { vehicleId: d.vehicleId, customerId: d.customerId, date: d.date, price: d.price, pay: d.pay, notes: d.notes, tradePurchaseId: d.tradePurchaseId });
       UI.sel.verkauf = r.id; if (UI.view !== "verkauf") location.hash = "verkauf";
       return r.message;
     } });
@@ -550,17 +560,15 @@ function deliverDialog(o) {
   form({ title: `Übergabe ${o.nr} → Verkauf`, wide: true,
     sub: `${esc(custName(o.customerId))} · ${esc(vLabel(v))}<br>Mit der Übergabe und der Restzahlung wird der Kaufvertrag erstellt.`,
     fields: [["price", "Verkaufspreis", "money"], ["date", "Übergabedatum", "date"], ["pay", "Restzahlung per", "select", { options: Object.entries(PAY) }],
-      ["hasTrade", "Fahrzeug wird in Zahlung genommen", "check"],
-      ["sec1", "Inzahlungnahme (nur wenn angehakt)", "sec"], ["tModel", "Modell"], ["tMake", "Hersteller"], ["tPlate", "Kennzeichen"], ["tKm", "Kilometerstand", "int"],
-      ["tValue", "Anrechnungswert", "money"], ["tVk", "Geplanter Wiederverkaufspreis", "money"], ["c", "", "calc"], ["notes", "Vereinbarungen", "area"]],
+      ["tradePurchaseId", "Inzahlungnahme", "select", { options: tradeOpts(o.customerId), empty: tradeOpts().length ? "– keine –" : "– keine offene Inzahlungnahme erfasst –", full: true }],
+      ["c", "", "calc"], ["notes", "Vereinbarungen", "area"]],
     values: { price: o.vk, date: today(), pay: "bank" }, submit: "Übergabe abschließen",
     onInput: d => {
-      const price = d.price === "" ? o.vk : parseMoney(d.price), tv = d.hasTrade ? parseMoney(d.tValue) : 0;
-      $("#calc").innerHTML = `Verkaufspreis <b>${money(price)}</b> · Anzahlung ${money(o.deposit)}${tv ? ` · Inzahlungnahme ${money(tv)}` : ""} · <b>Restzahlung ${money(price - o.deposit - tv)}</b> · Rohertrag ${money(price - (v?.ek || 0))}`;
+      const price = d.price === "" ? o.vk : parseMoney(d.price), tv = byId("purchases", d.tradePurchaseId)?.price || 0;
+      $("#calc").innerHTML = `Verkaufspreis <b>${money(price)}</b> · Anzahlung ${money(o.deposit)}${tv ? ` · abzgl. Inzahlungnahme ${money(tv)}` : ""} · <b>Restzahlung ${money(price - o.deposit - tv)}</b> · Rohertrag ${money(price - (v?.ek || 0))}`;
     },
     onSubmit: async d => {
-      const trade = d.hasTrade ? { make: d.tMake, model: d.tModel, plate: d.tPlate, km: d.tKm, value: d.tValue, vk: d.tVk } : null;
-      const r = await api("orderStatus", { id: o.id, status: "ausgeliefert", price: d.price, date: d.date, pay: d.pay, notes: d.notes, trade });
+      const r = await api("orderStatus", { id: o.id, status: "ausgeliefert", price: d.price, date: d.date, pay: d.pay, notes: d.notes, tradePurchaseId: d.tradePurchaseId });
       UI.sel.verkauf = r.id; location.hash = "verkauf"; return r.message;
     } });
 }
@@ -570,6 +578,14 @@ async function changeStatus(kind, id, to) {
     const o = byId("offers", id);
     if (to === "bestellt") return convertOfferDialog(o);
     return act(() => api("offerStatus", { id, status: to }));
+  }
+  if (kind === "purchase") {
+    const p = byId("purchases", id);
+    if (to === "angekauft") return form({ title: `${p.nr} doch ankaufen`, sub: `Die Inzahlungnahme wird zum normalen Ankauf: ${money(p.price)} werden an ${esc(custName(p.customerId))} ausgezahlt und das Fahrzeug kommt in den Bestand.`,
+      fields: [["pay", "Auszahlung per", "select", { options: Object.entries(PAY) }]], values: { pay: p.pay || "bank" }, submit: "Ankauf buchen",
+      onSubmit: async d => done(await api("purchaseStatus", { id, status: to, pay: d.pay })) });
+    return ask(p.status === "inzahlungnahme" ? "Inzahlungnahme stornieren" : "Ankauf stornieren", `${p.nr} wirklich stornieren? Das Fahrzeug wird ausgebucht.`, "Stornieren",
+      async () => done(await api("purchaseStatus", { id, status: to })));
   }
   if (kind === "sale") {
     const s = byId("sales", id);
@@ -589,16 +605,24 @@ async function changeStatus(kind, id, to) {
   return act(() => api("orderStatus", { id, status: to }));
 }
 
+/* Offene Inzahlungnahmen für die Auswahl beim Verkauf – die des Käufers zuerst */
+function tradeOpts(customerId) {
+  return S.purchases.filter(p => p.status === "inzahlungnahme")
+    .sort((a, b) => (b.customerId === customerId) - (a.customerId === customerId) || a.nr.localeCompare(b.nr))
+    .map(p => { const v = byId("vehicles", p.vehicleId); return [p.id, `${p.nr} · ${v ? vName(v) + (v.plate ? " (" + v.plate + ")" : "") : ""} · ${custName(p.customerId)} · ${money(p.price)}`]; });
+}
 function purchaseDialog() {
   if (!S.customers.length) return toast("Bitte zuerst den Verkäufer unter Kunden anlegen.");
-  form({ title: "Gebrauchtwagen ankaufen", wide: true,
-    fields: [["customerId", "Verkäufer (Kunde)", "select", { options: custOpts() }], ["modelId", "Katalogmodell (optional)", "select", { options: modelOpts(), empty: "– ohne Katalog –" }],
+  form({ title: "Gebrauchtwagen ankaufen / Inzahlungnahme", wide: true,
+    sub: "„Angekauft“: Das Fahrzeug wird sofort bezahlt und steht im Bestand. „Inzahlungnahme“: Das Fahrzeug wird vorgemerkt und beim Verkauf eines Fahrzeugs an diesen Kunden verrechnet.",
+    fields: [["status", "Status", "select", { options: [["angekauft", "Angekauft – sofort bezahlt"], ["inzahlungnahme", "Inzahlungnahme – wird mit einem Verkauf verrechnet"]], full: true }],
+      ["customerId", "Kunde", "select", { options: custOpts() }], ["modelId", "Katalogmodell (optional)", "select", { options: modelOpts(), empty: "– ohne Katalog –" }],
       ["model", "Modell", "text", { hint: "leer = aus Katalog" }], ["make", "Hersteller", "text", { hint: "leer = aus Katalog" }], ["cat", "Klasse", "select", { options: CATS.map(c => [c, c]), empty: "–" }],
       ["color", "Farbe"], ["plate", "Kennzeichen"], ["vin", "Fahrgestellnummer (FIN)"], ["year", "Baujahr", "int"], ["km", "Kilometerstand", "int"],
-      ["price", "Ankaufpreis", "money"], ["vk", "Geplanter Verkaufspreis", "money"], ["pay", "Zahlungsart", "select", { options: Object.entries(PAY) }], ["date", "Ankaufdatum", "date"],
+      ["price", "Ankaufpreis / Anrechnungswert", "money"], ["vk", "Geplanter Verkaufspreis", "money"], ["pay", "Zahlungsart (nur bei Ankauf)", "select", { options: Object.entries(PAY) }], ["date", "Datum", "date"],
       ["pnotes", "Vereinbarungen / bekannte Mängel", "area"]],
     modelFill: { make: "make", model: "model", cat: "cat" },
-    values: { date: today(), pay: "bank" }, submit: "Ankauf buchen",
+    values: { date: today(), pay: "bank", status: "angekauft" }, submit: "Speichern",
     onSubmit: async d => { const r = await api("purchase", d); UI.sel.ankauf = r.id; return r.message; } });
 }
 function customerDialog(c) {
@@ -660,8 +684,9 @@ function contractSale(s) {
 }
 function contractPurchase(p) {
   const v = byId("vehicles", p.vehicleId), c = byId("customers", p.customerId);
-  info("Ankaufvertrag " + p.nr, paperHead("Ankaufvertrag", p.nr, p.date, c, "Verkäufer") + (p.status === "storno" ? `<div class="stamp">STORNIERT</div>` : "") +
-    `<h4>Fahrzeug</h4>${vTable(v)}<h4>Preis</h4>${sumTable([[`Ankaufpreis (${PAY[p.pay]})`, p.price, 1]])}${p.notes ? `<p>Vereinbarungen / Mängel: ${esc(p.notes)}</p>` : ""}
+  const trade = ["inzahlungnahme", "verrechnet"].includes(p.status), title = trade ? "Inzahlungnahme" : "Ankaufvertrag", sale = p.saleId && byId("sales", p.saleId);
+  info(title + " " + p.nr, paperHead(title, p.nr, p.date, c, "Verkäufer") + (p.status === "storniert" ? `<div class="stamp">STORNIERT</div>` : "") +
+    `<h4>Fahrzeug</h4>${vTable(v)}<h4>Preis</h4>${sumTable([[trade ? "Anrechnungswert" : `Ankaufpreis (${PAY[p.pay]})`, p.price, 1]])}${trade ? `<p>${sale ? `Verrechnet mit Kaufvertrag ${sale.nr}.` : "Der Anrechnungswert wird mit dem Kaufpreis des neuen Fahrzeugs verrechnet."}</p>` : ""}${p.notes ? `<p>Vereinbarungen / Mängel: ${esc(p.notes)}</p>` : ""}
     <p style="font-size:11px;color:var(--ink-muted)">Der Verkäufer versichert, dass das Fahrzeug sein Eigentum ist, frei von Rechten Dritter ist und keine weiteren als die angegebenen Mängel bekannt sind.</p>
     <div class="sign"><div>Unterschrift Verkäufer</div><div>Unterschrift Ankäufer (${esc(p.buyer)})</div></div></div>`, true);
 }
@@ -754,6 +779,7 @@ document.addEventListener("change", e => {
   if (t.id === "fOpen") { UI.filter.openOnly = t.checked; render(); }
   if (t.id === "fYear") { UI.filter.year = t.value; render(); }
   if (t.id === "fOffer") { UI.filter.offer = t.value; render(); }
+  if (t.id === "fPurchase") { UI.filter.purchase = t.value; render(); }
   if (t.classList.contains("rowStatus")) changeStatus(t.dataset.kind, t.dataset.id, t.value);
 });
 document.addEventListener("submit", async e => {

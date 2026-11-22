@@ -142,3 +142,24 @@ def test_offer_order_sale_over_api(client):
     do(client, "offerStatus", {"id": oid, "status": "abgelehnt"})
     do(client, "deleteOffer", {"id": oid})
     assert client.get("/api/state").json()["offers"] == []
+
+
+def test_trade_in_selection_over_api(client):
+    login(client)
+    client.post("/api/password", json={"old": "admin", "new": "geheim123"})
+    mid = do(client, "saveModel", {"make": "Karin", "model": "190z", "ek": "35.000", "vk": "50.000", "active": True})["id"]
+    cid = do(client, "saveCustomer", {"name": "Snake"})["id"]
+    pid = do(client, "purchase", {"customerId": cid, "make": "Alt", "model": "Wagen", "price": "8.000",
+                                  "status": "inzahlungnahme"})["id"]
+    st = client.get("/api/state").json()
+    assert st["purchases"][0]["status"] == "inzahlungnahme" and st["vehicles"][0]["status"] == "inzahlung"
+    oid = do(client, "saveOffer", {"customerId": cid, "modelId": mid})["id"]
+    order_id = do(client, "offerStatus", {"id": oid, "status": "bestellt", "deposit": "10.000"})["id"]
+    do(client, "orderStatus", {"id": order_id, "status": "eingetroffen"})
+    r = do(client, "orderStatus", {"id": order_id, "status": "ausgeliefert", "tradePurchaseId": pid})
+    assert "Restzahlung 32.000,00" in r["message"]
+    st = client.get("/api/state").json()
+    p = st["purchases"][0]
+    assert p["status"] == "verrechnet" and p["saleId"] == st["sales"][0]["id"]
+    assert st["sales"][0]["tradeValue"] == 8000
+    do(client, "purchaseStatus", {"id": pid, "status": "storniert"}, 400)   # verrechnet -> erst Verkauf stornieren

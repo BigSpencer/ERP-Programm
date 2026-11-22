@@ -429,6 +429,7 @@ VEHICLE_STATUS = {
     "reserved": "Reserviert",
     "sold": "Verkauft",
     "removed": "Ausgebucht",
+    "pending": "Inzahlungnahme offen",   # erfasst, wird erst mit einem Fahrzeugverkauf übernommen
 }
 # Status, in denen ein Fahrzeug verkauft werden kann
 VEHICLE_AVAILABLE = ("stock", "showroom", "reserved")
@@ -450,6 +451,10 @@ VEHICLE_ORDER_STATUS = {
 }
 
 DEAL_STATUS = {"done": "Abgeschlossen", "cancelled": "Storniert"}
+
+# Gebrauchtwagen-Ankauf: normaler Ankauf (sofort bezahlt) oder Inzahlungnahme (mit einem Verkauf verrechnet)
+PURCHASE_STATUS = {"done": "Angekauft", "trade_in": "Inzahlungnahme", "settled": "Verrechnet",
+                   "cancelled": "Storniert"}
 
 OFFER_STATUS = {"open": "Offen", "declined": "Abgelehnt", "expired": "Abgelaufen", "ordered": "Bestellt"}
 
@@ -604,6 +609,8 @@ class UsedPurchase(Versioned, Base):
     journal_entry_id: Mapped[int | None] = mapped_column(ForeignKey("journal_entries.id"))
     buyer: Mapped[str] = mapped_column(String(50), default="")
     notes: Mapped[str] = mapped_column(Text, default="")
+    # Ab Version 1.4: Verkauf, mit dem eine Inzahlungnahme verrechnet wurde
+    sale_id: Mapped[int | None] = mapped_column(ForeignKey("vehicle_sales.id"), nullable=True)
 
     vehicle: Mapped[Vehicle] = relationship()
     customer: Mapped[Customer] = relationship()

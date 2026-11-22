@@ -495,7 +495,8 @@ def sell_vehicle(s: Session, data: dict) -> m.VehicleSale:
     """
     trade_in = data.get("trade_in")
     order_id = data.get("order_id")
-    data = _clean({k: v for k, v in data.items() if k not in ("trade_in", "order_id")})
+    trade_purchase_id = data.get("trade_in_purchase_id")
+    data = _clean({k: v for k, v in data.items() if k not in ("trade_in", "order_id", "trade_in_purchase_id")})
     v = _get(s, m.Vehicle, data.get("vehicle_id"), "Fahrzeug")
     customer = _get(s, m.Customer, data.get("customer_id"), "Kunde")
     # Sperre gegen gleichzeitigen Verkauf desselben Fahrzeugs an zwei Arbeitsplätzen
@@ -530,7 +531,24 @@ def sell_vehicle(s: Session, data: dict) -> m.VehicleSale:
                          notes=data.get("notes", ""), order_id=order_id or None, deposit=deposit)
     s.add(sale)
     trade_value = Decimal(0)
-    if trade_in:
+    if trade_purchase_id:
+        if trade_in:
+            raise BusinessError("Bitte nur eine Inzahlungnahme angeben")
+        tp = _get(s, m.UsedPurchase, trade_purchase_id, "Inzahlungnahme")
+        if tp.status != "trade_in":
+            raise BusinessError(f"{tp.number} ist keine offene Inzahlungnahme")
+        trade_value = Decimal(tp.price)
+        if trade_value + deposit > price:
+            raise BusinessError("Anrechnungswert und Anzahlung dürfen den Verkaufspreis nicht übersteigen")
+        s.flush()                                   # Verkaufsnummer/ID vergeben
+        tp.status = "settled"
+        tp.sale_id = sale.id
+        tp.vehicle.status = "stock"
+        tp.vehicle.purchase_date = sale_date
+        tp.vehicle.notes = (tp.vehicle.notes + "\n" if tp.vehicle.notes else "") + f"Verrechnet mit {sale.number}"
+        sale.trade_in_vehicle_id = tp.vehicle_id
+        sale.trade_in_value = trade_value
+    elif trade_in:
         trade_value = parse_money(trade_in.get("trade_in_value"))
         if trade_value <= 0:
             raise BusinessError("Bitte den Anrechnungswert der Inzahlungnahme angeben")
@@ -578,6 +596,14 @@ def cancel_sale(s: Session, sale_id: int) -> m.VehicleSale:
     reverse_entry(s, sale.journal_entry_id, f"Storno Fahrzeugverkauf {sale.number}", sale.number)
     sale.status = "cancelled"
     sale.vehicle.status = "stock"
+    tp = s.scalars(select(m.UsedPurchase).where(m.UsedPurchase.sale_id == sale.id)).first()
+    if tp is not None:                  # Inzahlungnahme aus dem Ankauf wieder offen
+        tp.status = "trade_in"
+        tp.sale_id = None
+        tv.status = "pending"
+        tv.showroom_since = None
+        tv.notes = (tv.notes + "\n" if tv.notes else "") + f"Verrechnung mit {sale.number} storniert"
+        tv = None
     if tv is not None:
         tv.status = "removed"
         tv.showroom_since = None
@@ -609,11 +635,19 @@ def search_purchases(s: Session, text: str = ""):
 
 
 def purchase_used(s: Session, data: dict) -> m.UsedPurchase:
-    """Kauft einen Gebrauchtwagen an (Verkäufer = Kunde)."""
+    """Kauft einen Gebrauchtwagen an (Verkäufer = Kunde).
+
+    ``status`` "done" (Standard): sofort bezahlt und gebucht, Fahrzeug im Bestand.
+    ``status`` "trade_in": Inzahlungnahme – Fahrzeug und Anrechnungswert werden erfasst,
+    aber erst mit einem Fahrzeugverkauf verrechnet und in den Bestand übernommen.
+    """
     seller = _get(s, m.Customer, data.get("customer_id"), "Verkäufer")
+    status = data.get("status") or "done"
+    if status not in ("done", "trade_in"):
+        raise BusinessError("Bitte als Status „Angekauft“ oder „Inzahlungnahme“ wählen")
     price = parse_money(data.get("price"))
     if price <= 0:
-        raise BusinessError("Bitte den Ankaufpreis angeben")
+        raise BusinessError("Bitte den Ankaufpreis bzw. Anrechnungswert angeben")
     account = _payment_account(data.get("payment_account"))
     date = data.get("purchase_date") or dt.date.today()
     vehicle_data = {k: data[k] for k in VEHICLE_FIELDS if k in data}
@@ -625,17 +659,64 @@ def purchase_used(s: Session, data: dict) -> m.UsedPurchase:
                        buyer=context.username, notes=str(data.get("purchase_notes", "")).strip())
     s.add(p)
     s.flush()
-    entry = finance.post(s, f"Gebrauchtwagen-Ankauf {p.number} {v.name} von {seller.name}",
-                         [("3200", price, 0), (account, 0, price)], date, p.number)
-    p.journal_entry_id = entry.id
-    v.notes = (v.notes + "\n" if v.notes else "") + f"Ankauf {p.number}"
+    if status == "trade_in":
+        p.status = "trade_in"
+        v.status = "pending"
+        v.source = "trade_in"
+        v.notes = (v.notes + "\n" if v.notes else "") + f"Inzahlungnahme {p.number} ({seller.name})"
+    else:
+        _book_purchase(s, p)
     s.flush()
-    audit(s, "purchase", "used_purchase", p.number, f"{v.number} {price}")
+    audit(s, "purchase", "used_purchase", p.number, f"{v.number} {price} {status}")
     return p
+
+
+def _book_purchase(s: Session, p: m.UsedPurchase) -> None:
+    entry = finance.post(s, f"Gebrauchtwagen-Ankauf {p.number} {p.vehicle.name} von {p.customer.name}",
+                         [("3200", p.price, 0), (p.payment_account, 0, p.price)], p.purchase_date, p.number)
+    p.journal_entry_id = entry.id
+    p.vehicle.notes = (p.vehicle.notes + "\n" if p.vehicle.notes else "") + f"Ankauf {p.number}"
+
+
+def open_trade_ins(s: Session, customer_id: int | None = None):
+    q = select(m.UsedPurchase).where(m.UsedPurchase.status == "trade_in")
+    if customer_id:
+        q = q.where(m.UsedPurchase.customer_id == customer_id)
+    return s.scalars(q.order_by(m.UsedPurchase.id)).all()
+
+
+def set_purchase_status(s: Session, purchase_id: int, status: str, data: dict | None = None):
+    """Inzahlungnahme -> Angekauft (doch ausbezahlt) oder Storno."""
+    p = _get(s, m.UsedPurchase, purchase_id, "Ankauf")
+    if status == p.status:
+        return p
+    if status == "cancelled":
+        return cancel_purchase(s, purchase_id)
+    if (p.status, status) == ("trade_in", "done"):
+        data = data or {}
+        p.payment_account = _payment_account(data.get("payment_account") or p.payment_account)
+        p.status = "done"
+        p.vehicle.status = "stock"
+        p.vehicle.source = "used_purchase"
+        _book_purchase(s, p)
+        s.flush()
+        audit(s, "status", "used_purchase", p.number, "trade_in -> done")
+        return p
+    if p.status == "settled":
+        raise BusinessError("Die Inzahlungnahme ist bereits mit einem Verkauf verrechnet. Bitte zuerst den Verkauf stornieren.")
+    raise BusinessError("Dieser Statuswechsel ist nicht möglich")
 
 
 def cancel_purchase(s: Session, purchase_id: int) -> m.UsedPurchase:
     p = _get(s, m.UsedPurchase, purchase_id, "Ankauf")
+    if p.status == "settled":
+        raise BusinessError("Die Inzahlungnahme ist bereits mit einem Verkauf verrechnet. Bitte zuerst den Verkauf stornieren.")
+    if p.status == "trade_in":                       # noch nichts gebucht
+        p.status = "cancelled"
+        p.vehicle.status = "removed"
+        s.flush()
+        audit(s, "cancel", "used_purchase", p.number)
+        return p
     if p.status != "done":
         raise BusinessError("Der Ankauf ist bereits storniert")
     if p.vehicle.status not in ("stock", "showroom"):
@@ -663,7 +744,8 @@ def customer_history(s: Session, customer_id: int) -> list[tuple[dt.date, str, s
         if x.trade_in_vehicle:
             out.append((x.sale_date, "Inzahlungnahme", x.number, x.trade_in_vehicle.label, x.trade_in_value))
     for x in s.scalars(select(m.UsedPurchase).where(m.UsedPurchase.customer_id == customer_id)):
-        label = "Ankauf von Kunde" + (" (storniert)" if x.status == "cancelled" else "")
+        label = ("Inzahlungnahme" if x.status in ("trade_in", "settled") else "Ankauf von Kunde") \
+            + f" ({m.PURCHASE_STATUS.get(x.status, x.status)})"
         out.append((x.purchase_date, label, x.number, x.vehicle.label, x.price))
     for x in s.scalars(select(m.VehicleOrder).where(m.VehicleOrder.customer_id == customer_id)):
         out.append((x.order_date, f"Bestellung ({m.VEHICLE_ORDER_STATUS[x.status]})", x.number,
