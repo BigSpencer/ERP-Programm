@@ -121,8 +121,7 @@ def state(s, user: m.User) -> dict:
     data = {
         "version": f"{__version__} · {asset_version()[:7]}",
         "me": me(s, user),
-        "settings": {"company": get_setting(s, "company_name"), "vat": float(dealer.vat_rate(s)),
-                     "seller": user.full_name or user.username},
+        "settings": {"company": get_setting(s, "company_name"), "seller": user.full_name or user.username},
         "models": [{"id": _s(x.id), "nr": x.number, "make": x.make, "model": x.model, "cat": x.category,
                     "ek": _f(x.purchase_price), "vk": _f(x.sales_price), "active": x.active}
                    for x in s.scalars(select(m.VehicleModel))],
@@ -131,7 +130,7 @@ def state(s, user: m.User) -> dict:
                       "status": V_STATUS.get(v.status, v.status), "source": v.source, "vin": v.vin,
                       "plate": v.plate, "color": v.color, "year": v.year, "km": v.mileage,
                       "ek": _f(v.purchase_price), "vk": _f(v.list_price), "inDate": _date(v.purchase_date),
-                      "margin": v.margin_taxation, "loc": v.location, "showSince": _date(v.showroom_since),
+                      "loc": v.location, "showSince": _date(v.showroom_since),
                       "resFor": _s(v.reserved_for_id), "resUntil": _date(v.reserved_until), "notes": v.notes}
                      for v in vehicles],
         "orders": [{"id": _s(o.id), "nr": o.number, "modelId": _s(o.model_id), "customerId": _s(o.customer_id),
@@ -140,7 +139,7 @@ def state(s, user: m.User) -> dict:
                     "status": O_STATUS.get(o.status, o.status), "vehicleId": _s(o.vehicle_id), "notes": o.notes}
                    for o in s.scalars(select(m.VehicleOrder))],
         "sales": [{"id": _s(x.id), "nr": x.number, "vehicleId": _s(x.vehicle_id), "customerId": _s(x.customer_id),
-                   "date": _date(x.sale_date), "price": _f(x.price), "ek": _f(x.purchase_price), "tax": _f(x.tax_amount),
+                   "date": _date(x.sale_date), "price": _f(x.price), "ek": _f(x.purchase_price),
                    "tradeId": _s(x.trade_in_vehicle_id), "tradeValue": _f(x.trade_in_value),
                    "pay": PAY_TO_WEB.get(x.payment_account, "bank"), "status": D_STATUS.get(x.status, x.status),
                    "seller": x.salesperson, "notes": x.notes}
@@ -177,7 +176,7 @@ def _vehicle_data(b: dict, edit: bool) -> dict:
          "category": _str(b.get("cat")), "condition": COND_FROM_WEB.get(b.get("cond") or "neu", "new"),
          "vin": _str(b.get("vin")), "plate": _str(b.get("plate")), "color": _str(b.get("color")),
          "year": b.get("year") or 0, "mileage": b.get("km") or 0, "purchase_date": _pdate(b.get("inDate")),
-         "margin_taxation": bool(b.get("margin")), "location": _str(b.get("loc")), "notes": _str(b.get("notes"))}
+         "location": _str(b.get("loc")), "notes": _str(b.get("notes"))}
     for web, key in (("ek", "purchase_price"), ("vk", "list_price")):
         val = b.get(web)
         if val not in (None, ""):
@@ -271,7 +270,7 @@ def a_purchase(s, b):
         "vin": _str(b.get("vin")), "plate": _str(b.get("plate")), "year": b.get("year") or 0,
         "mileage": b.get("km") or 0, "price": b.get("price") or "", "list_price": b.get("vk") or "",
         "payment_account": _pay(b.get("pay")), "purchase_date": _pdate(b.get("date")),
-        "margin_taxation": bool(b.get("margin", True)), "purchase_notes": _str(b.get("pnotes"))})
+        "purchase_notes": _str(b.get("pnotes"))})
     return {"id": _s(p.id), "message": f"Ankauf {p.number} gebucht. Das Fahrzeug steht im Bestand."}
 
 
@@ -310,11 +309,7 @@ def a_settings(s, b):
     company = _str(b.get("company"))
     if not company:
         raise BusinessError("Bitte einen Firmennamen angeben")
-    vat = dealer.parse_money(b.get("vat") or "0")
-    if not 0 <= vat < 100:
-        raise BusinessError("Der USt-Satz muss zwischen 0 und 99 liegen")
     set_setting(s, "company_name", company)
-    set_setting(s, "vehicle_vat_rate", format(vat.normalize(), "f") if vat else "0")
     return {"message": "Firmendaten gespeichert"}
 
 
@@ -389,6 +384,8 @@ def create_app(url: str | None = None) -> FastAPI:
     def _startup():
         db.connect(url or database_url())
         db.init_schema()
+        with db.session_scope() as s:            # Spielbetrieb: Fahrzeuge werden immer ohne Steuer gerechnet
+            set_setting(s, "vehicle_vat_rate", "0")
         initial = os.environ.get("ERP_ADMIN_PASSWORD")
         if initial:
             with db.session_scope() as s:

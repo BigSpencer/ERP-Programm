@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
 from sqlalchemy import select
 
 from .. import models as m
-from ..services import BusinessError, auth, dec, finance, get_setting, inventory, reports, set_setting
+from ..services import auth, finance, get_setting, inventory, reports, set_setting
 from . import style
 from .masterdata import AccountsPage, WarehousesPage
 from .widgets import (
@@ -405,8 +405,7 @@ class AuditPage(ListPage):
 
 
 COMPANY_KEYS = [("company_name", "Firmenname"), ("company_street", "Straße"),
-                ("company_city", "PLZ / Ort"), ("company_vat_id", "USt-IdNr."), ("company_iban", "IBAN"),
-                ("vehicle_vat_rate", "USt-Satz Fahrzeuge in % (0 = ohne USt)")]
+                ("company_city", "PLZ / Ort"), ("company_iban", "IBAN")]
 
 
 class CompanyPage(QWidget):
@@ -436,13 +435,6 @@ class CompanyPage(QWidget):
 
     def save(self):
         vals = {k: e.text().strip() for k, e in self.edits.items()}
-        try:
-            rate = dec(vals.get("vehicle_vat_rate") or "0")
-            if not 0 <= rate < 100:
-                raise BusinessError("USt-Satz muss zwischen 0 und 99 liegen")
-        except BusinessError as exc:
-            QMessageBox.warning(self, "Firmendaten", str(exc))
-            return
         run(self, lambda s: [set_setting(s, k, v) for k, v in vals.items()], success="Gespeichert.")
 
 

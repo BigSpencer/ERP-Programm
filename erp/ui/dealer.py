@@ -59,12 +59,11 @@ def vehicle_fields(s, new: bool, sold=False) -> list[Field]:
         Field("plate", "Kennzeichen"),
         Field("year", "Baujahr", "int", maximum=2100),
         Field("mileage", "Kilometerstand", "int", maximum=9_999_999),
-        Field("purchase_price", "Einkaufspreis (brutto)", "money", readonly=sold,
+        Field("purchase_price", "Einkaufspreis", "money", readonly=sold,
               hint="leer = Katalogpreis" if new else ""),
-        Field("list_price", "Verkaufspreis / Listenpreis (brutto)", "money",
+        Field("list_price", "Verkaufspreis / Listenpreis", "money",
               hint="leer = Katalogpreis" if new else ""),
         Field("purchase_date", "Eingangsdatum", "date"),
-        Field("margin_taxation", "Differenzbesteuerung (§ 25a UStG)", "bool"),
         Field("location", "Standort / Stellplatz"),
         Field("notes", "Notizen", "multiline"),
     ]
@@ -99,7 +98,7 @@ class CockpitPage(QWidget):
             self.tiles[key] = Tile(title)
             grid.addWidget(self.tiles[key], i // 4, i % 4)
         lay.addLayout(grid)
-        self.chart = BarChart(title="Fahrzeugverkäufe je Monat (EUR brutto)")
+        self.chart = BarChart(title="Fahrzeugverkäufe je Monat (EUR)")
         lay.addWidget(self.chart)
         lower = QHBoxLayout()
         self.aging = DataTable(["Fahrzeug", "Status", "Standtage", "VK"])
@@ -150,7 +149,7 @@ class CockpitPage(QWidget):
 
 class VehicleModelsPage(ListPage):
     title = "Fahrzeugkatalog – Modelle und Preise"
-    columns = ["Nr.", "Modell", "Hersteller", "Klasse", "EK (brutto)", "VK (brutto)", "Marge",
+    columns = ["Nr.", "Modell", "Hersteller", "Klasse", "EK", "VK", "Marge",
                "Marge %", "Lieferant", "Im Bestand", "Aktiv"]
 
     def __init__(self, parent=None):
@@ -202,8 +201,8 @@ class VehicleModelsPage(ListPage):
             Field("make", "Hersteller / Marke", required=True),
             Field("model", "Modell", required=True),
             Field("category", "Klasse", "choice", CATEGORIES),
-            Field("purchase_price", "Einkaufspreis (brutto)", "money"),
-            Field("sales_price", "Verkaufspreis (brutto)", "money"),
+            Field("purchase_price", "Einkaufspreis", "money"),
+            Field("sales_price", "Verkaufspreis", "money"),
             Field("default_supplier_id", "Standardlieferant / Hersteller", "choice", suppliers),
             Field("notes", "Notizen / Ausstattung", "multiline"),
             Field("active", "Aktiv", "bool"),
@@ -422,7 +421,7 @@ class VehiclesPage(VehicleActions, ListPage):
 
 class ShowroomPage(VehicleActions, ListPage):
     title = "Ausstellung – Showroom"
-    columns = ["Stellplatz", "Nr.", "Fahrzeug", "Klasse", "Farbe", "Zustand", "VK (brutto)", "Ausgestellt seit",
+    columns = ["Stellplatz", "Nr.", "Fahrzeug", "Klasse", "Farbe", "Zustand", "VK", "Ausgestellt seit",
                "Tage", "Status", "Reserviert für"]
 
     def __init__(self, parent=None):
@@ -501,8 +500,8 @@ def open_order_dialog(parent, order_id=None, preset=None) -> bool:
         Field("color", "Farbe / Ausstattung"),
         Field("customer_id", "Kunde (leer = Lagerfahrzeug)", "choice", customers),
         Field("supplier_id", "Lieferant / Hersteller", "choice", suppliers),
-        Field("purchase_price", "Einkaufspreis (brutto)", "money", hint="leer = Katalogpreis"),
-        Field("sales_price", "Vereinbarter Verkaufspreis (brutto)", "money", hint="leer = Katalogpreis"),
+        Field("purchase_price", "Einkaufspreis", "money", hint="leer = Katalogpreis"),
+        Field("sales_price", "Vereinbarter Verkaufspreis", "money", hint="leer = Katalogpreis"),
         Field("deposit", "Anzahlung des Kunden", "money"),
         Field("order_date", "Bestelldatum", "date"),
         Field("expected_date", "Voraussichtliche Lieferung", "optdate"),
@@ -618,7 +617,7 @@ def open_sale_dialog(parent, vehicle_id=None) -> bool:
         Field("vehicle_id", "Fahrzeug", "choice", vehicles, required=True),
         Field("customer_id", "Käufer (Kunde)", "choice", customers, required=True),
         Field("sale_date", "Verkaufsdatum", "date"),
-        Field("price", "Verkaufspreis (brutto)", "money", hint="leer = Listenpreis"),
+        Field("price", "Verkaufspreis", "money", hint="leer = Listenpreis"),
         Field("payment_account", "Zahlungsart", "choice", PAYMENTS, required=True),
         Field("has_trade_in", "Inzahlungnahme eines Fahrzeugs", "bool"),
         Field("notes", "Vereinbarungen", "multiline"),
@@ -651,7 +650,7 @@ def vehicle_fields_trade_in():
         Field("plate", "Kennzeichen"),
         Field("year", "Baujahr", "int", maximum=2100),
         Field("mileage", "Kilometerstand", "int", maximum=9_999_999),
-        Field("trade_in_value", "Anrechnungswert (brutto)", "money", required=True),
+        Field("trade_in_value", "Anrechnungswert", "money", required=True),
         Field("list_price", "Geplanter Wiederverkaufspreis", "money"),
     ]
 
@@ -833,10 +832,9 @@ class UsedPurchasesPage(ListPage):
             Field("year", "Baujahr", "int", maximum=2100),
             Field("mileage", "Kilometerstand", "int", maximum=9_999_999),
             Field("price", "Ankaufpreis", "money", required=True),
-            Field("list_price", "Geplanter Verkaufspreis (brutto)", "money"),
+            Field("list_price", "Geplanter Verkaufspreis", "money"),
             Field("payment_account", "Zahlungsart", "choice", PAYMENTS, required=True),
             Field("purchase_date", "Ankaufdatum", "date"),
-            Field("margin_taxation", "Differenzbesteuerung (Ankauf von Privat)", "bool"),
             Field("purchase_notes", "Vereinbarungen / bekannte Mängel", "multiline"),
         ]
         dlg = FormDialog(self, "Gebrauchtwagen ankaufen", fields,

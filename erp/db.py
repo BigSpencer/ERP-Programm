@@ -127,7 +127,7 @@ DEFAULT_SETTINGS = {
     "company_vat_id": "",
     "company_iban": "",
     "currency": "EUR",
-    "vehicle_vat_rate": "19",
+    "vehicle_vat_rate": "0",      # Fahrzeuge ohne Umsatzsteuer (Spielbetrieb)
 }
 
 

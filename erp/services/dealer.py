@@ -784,10 +784,10 @@ def _signatures(left: str, right: str) -> str:
 def sale_contract_html(s: Session, sale_id: int) -> str:
     x = _get(s, m.VehicleSale, sale_id, "Verkauf")
     rate = vat_rate(s)
-    rows = [("Kaufpreis (brutto)", x.price, True)]
-    if x.vehicle.margin_taxation:
+    rows = [("Kaufpreis", x.price, True)]
+    if x.vehicle.margin_taxation and rate:
         tax_note = "Differenzbesteuerung gem. § 25a UStG – Umsatzsteuer wird nicht gesondert ausgewiesen."
-    elif rate:
+    elif rate and not x.vehicle.margin_taxation:
         rows.append((f"darin enthaltene USt {rate:.0f} %", x.tax_amount, False))
         tax_note = ""
     else:
@@ -825,7 +825,7 @@ def order_html(s: Session, order_id: int) -> str:
     o = _get(s, m.VehicleOrder, order_id, "Bestellung")
     if o.customer:
         head = _head(s, "Fahrzeugbestellung", o.number, o.order_date, o.customer, "Besteller")
-        rows = [("Vereinbarter Kaufpreis (brutto)", o.sales_price, True)]
+        rows = [("Vereinbarter Kaufpreis", o.sales_price, True)]
         if o.deposit:
             rows += [("geleistete Anzahlung", o.deposit, False),
                      ("Restbetrag bei Übergabe", Decimal(o.sales_price) - Decimal(o.deposit), True)]
@@ -834,7 +834,7 @@ def order_html(s: Session, order_id: int) -> str:
         partner = o.supplier or type("P", (), {"name": "", "street": "", "zip": "", "city": "",
                                                "number": "", "phone": ""})()
         head = _head(s, "Bestellung (Lager)", o.number, o.order_date, partner, "Lieferant")
-        rows = [("Einkaufspreis (brutto)", o.purchase_price, True)]
+        rows = [("Einkaufspreis", o.purchase_price, True)]
         sign = ""
     exp = f"<p>Voraussichtliche Lieferung: {o.expected_date:%d.%m.%Y}</p>" if o.expected_date else ""
     return (head + "<h3>Fahrzeug</h3>" + _vehicle_table(o.vehicle, o.model, o.color) + exp

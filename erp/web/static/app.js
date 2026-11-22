@@ -64,9 +64,6 @@ const custName = id => byId("customers", id)?.name ?? "";
 const vName = v => (v.make + " " + v.model).trim();
 const vLabel = v => v ? v.nr + " " + vName(v) + (v.plate || v.vin ? " (" + (v.plate || v.vin) + ")" : "") : "";
 
-/* Vorschau im Verkaufsdialog – die verbindliche Berechnung macht der Server */
-function splitRegular(gross) { const r = Number(S.settings.vat) || 0; const net = round2(gross * 100 / (100 + r)); return [net, round2(gross - net)]; }
-function splitMargin(gross, ek) { const r = Number(S.settings.vat) || 0; const m = Math.max(gross - ek, 0); const tax = round2(m * r / (100 + r)); return [round2(gross - tax), tax]; }
 
 function history(cid) {
   const out = [];
@@ -167,7 +164,7 @@ function cockpit() {
     ${tile("In der Ausstellung", k.showroom, k.models + " Modelle im Katalog")}${tile("Offene Bestellungen", k.open, `<span class="${k.late ? "late" : ""}">${k.late} überfällig</span> · Anzahlungen ${money(k.deposits)}`)}
     ${tile("Verkäufe lfd. Monat", money(k.mSum), k.mCount + " Fahrzeug(e)")}${tile("Rohertrag lfd. Monat", money(k.mMargin), pct(k.mMargin, k.mSum))}
     ${tile("Verkäufe lfd. Jahr", money(k.ySum), k.yCount + " Fahrzeug(e)")}${tile("Rohertrag lfd. Jahr", money(k.yMargin), pct(k.yMargin, k.ySum))}</div>
-    <div class="chart"><h3 class="eyebrow">Fahrzeugverkäufe je Monat · brutto</h3>${chart(monthly())}</div>
+    <div class="chart"><h3 class="eyebrow">Fahrzeugverkäufe je Monat</h3>${chart(monthly())}</div>
     <div class="two"><div><h3 class="eyebrow">Längste Standzeit</h3>${tbl([["Fahrzeug"], ["Status"], ["Tage", 1], ["VK", 1]],
       aging.map(v => ({ id: v.id, cells: [esc(vLabel(v)), pill(v.status, STATUS[v.status]), days(v.inDate), num(v.vk)] })), "Kein Fahrzeug im Bestand")}</div>
     <div><h3 class="eyebrow">Erwartete Fahrzeuge</h3>${tbl([["Bestellung"], ["Modell"], ["Für"], ["Liefertermin", 1]],
@@ -321,12 +318,10 @@ function katalog() {
 
 /* Firmendaten */
 function einstellungen() {
-  return head("System", "Firmendaten", "Erscheinen im Schriftzug und auf den Verträgen") +
+  return head("System", "Firmendaten", "Der Firmenname erscheint im Schriftzug und auf den Verträgen") +
     `<form class="settings" id="setForm"><div class="card form">
       <label class="full">Firmenname<input id="setCompany" value="${esc(S.settings.company)}"></label>
-      <label>USt-Satz Fahrzeuge in %<input id="setVat" inputmode="decimal" value="${esc(String(S.settings.vat).replace(".", ","))}"></label>
-      <div class="sec"><button class="btn primary" type="submit">Speichern</button></div></div>
-      <div class="card"><b>Tipp für GTA-RP</b><p>Mit einem USt-Satz von 0 rechnet das Programm ohne Umsatzsteuer, und die Verträge weisen keine Steuer aus.</p></div></form>`;
+      <div class="sec"><button class="btn primary" type="submit">Speichern</button></div></div></form>`;
 }
 
 /* Benutzer */
@@ -416,9 +411,9 @@ const vehicleFields = (isNew, locked) => [
   ["model", "Modell", "text", { hint: "leer = aus Katalog" }], ["make", "Hersteller", "text", { hint: "leer = aus Katalog" }],
   ["cat", "Klasse", "select", { options: CATS.map(c => [c, c]), empty: "–" }], ["cond", "Zustand", "select", { options: [["neu", "Neu"], ["gebraucht", "Gebraucht"]] }],
   ["color", "Farbe"], ["plate", "Kennzeichen"], ["vin", "Fahrgestellnummer (FIN)"], ["year", "Baujahr", "int"], ["km", "Kilometerstand", "int"],
-  ["inDate", "Eingangsdatum", "date"], ["ek", "Einkaufspreis (brutto)" + (locked ? " · fest" : ""), "money", { hint: isNew ? "leer = Katalogpreis" : "" }],
-  ["vk", "Verkaufspreis (brutto)", "money", { hint: isNew ? "leer = Katalogpreis" : "" }], ["loc", "Standort / Stellplatz"],
-  ["margin", "Differenzbesteuerung (§ 25a UStG)", "check"], ["notes", "Notizen", "area"]];
+  ["inDate", "Eingangsdatum", "date"], ["ek", "Einkaufspreis" + (locked ? " · fest" : ""), "money", { hint: isNew ? "leer = Katalogpreis" : "" }],
+  ["vk", "Verkaufspreis", "money", { hint: isNew ? "leer = Katalogpreis" : "" }], ["loc", "Standort / Stellplatz"],
+  ["notes", "Notizen", "area"]];
 
 function vehicleDialog(v) {
   form({ title: v ? `Fahrzeug ${v.nr} bearbeiten` : "Neues Fahrzeug", sub: v ? esc(vName(v)) : "Wähle ein Katalogmodell: Modell, Hersteller, Klasse und Preise werden übernommen und können angepasst werden.",
@@ -444,16 +439,15 @@ function saleDialog(v) {
   if (!S.customers.length) return toast("Bitte zuerst den Käufer unter Kunden anlegen.");
   form({ title: "Fahrzeug verkaufen", sub: "Der Kaufvertrag wird sofort erstellt. Bei Inzahlungnahme kommt das Altfahrzeug automatisch in den Bestand.", wide: true,
     fields: [["vehicleId", "Fahrzeug", "select", { options: list, full: true }], ["customerId", "Käufer", "select", { options: custOpts() }], ["date", "Verkaufsdatum", "date"],
-      ["price", "Verkaufspreis (brutto)", "money", { hint: "leer = Listenpreis" }], ["pay", "Zahlungsart", "select", { options: Object.entries(PAY) }],
+      ["price", "Verkaufspreis", "money", { hint: "leer = Listenpreis" }], ["pay", "Zahlungsart", "select", { options: Object.entries(PAY) }],
       ["hasTrade", "Fahrzeug wird in Zahlung genommen", "check"],
       ["sec1", "Inzahlungnahme (nur wenn angehakt)", "sec"], ["tMake", "Hersteller"], ["tModel", "Modell"], ["tPlate", "Kennzeichen"], ["tKm", "Kilometerstand", "int"],
-      ["tValue", "Anrechnungswert (brutto)", "money"], ["tVk", "Geplanter Wiederverkaufspreis", "money"], ["c", "", "calc"], ["notes", "Vereinbarungen", "area"]],
+      ["tValue", "Anrechnungswert", "money"], ["tVk", "Geplanter Wiederverkaufspreis", "money"], ["c", "", "calc"], ["notes", "Vereinbarungen", "area"]],
     values: { vehicleId: v?.id, customerId: v?.resFor || "", date: today(), pay: "bank" }, submit: "Verkauf abschließen",
     onInput: d => {
       const x = byId("vehicles", d.vehicleId); if (!x) return;
       const price = d.price === "" ? x.vk : parseMoney(d.price), tv = d.hasTrade ? parseMoney(d.tValue) : 0;
-      const [, tax] = x.margin ? splitMargin(price, x.ek) : splitRegular(price);
-      $("#calc").innerHTML = `Kaufpreis <b>${money(price)}</b> · EK ${money(x.ek)} · Rohertrag <b>${money(price - x.ek)}</b>${tv ? ` · abzgl. Inzahlungnahme ${money(tv)}` : ""} · Zahlbetrag <b>${money(price - tv)}</b> · ${x.margin ? "Differenzbesteuerung" : "enth. USt"} ${money(tax)}`;
+      $("#calc").innerHTML = `Kaufpreis <b>${money(price)}</b> · EK ${money(x.ek)} · Rohertrag <b>${money(price - x.ek)}</b>${tv ? ` · abzgl. Inzahlungnahme ${money(tv)}` : ""} · Zahlbetrag <b>${money(price - tv)}</b>`;
     },
     onSubmit: async d => {
       const trade = d.hasTrade ? { make: d.tMake, model: d.tModel, plate: d.tPlate, km: d.tKm, value: d.tValue, vk: d.tVk } : null;
@@ -466,7 +460,7 @@ function orderDialog(o, preset = {}) {
   if (!S.models.length) return toast("Bitte zuerst Modelle im Fahrzeugkatalog anlegen.");
   form({ title: o ? `Bestellung ${o.nr} bearbeiten` : "Neue Fahrzeugbestellung",
     fields: [["modelId", "Modell (Katalog)", "select", { options: modelOpts(), full: true }], ["color", "Farbe / Ausstattung"], ["customerId", "Für Kunde", "select", { options: custOpts(), empty: "– Lagerfahrzeug –" }],
-      ["ek", "Einkaufspreis (brutto)", "money", { hint: "leer = Katalogpreis" }], ["vk", "Vereinbarter Verkaufspreis", "money", { hint: "leer = Katalogpreis" }],
+      ["ek", "Einkaufspreis", "money", { hint: "leer = Katalogpreis" }], ["vk", "Vereinbarter Verkaufspreis", "money", { hint: "leer = Katalogpreis" }],
       ["deposit", "Anzahlung des Kunden", "money"], ["date", "Bestelldatum", "date"], ["expected", "Voraussichtliche Lieferung", "date"], ["notes", "Notizen", "area"]],
     modelFill: { ek: "ek", vk: "vk" }, fillNow: !o,
     values: o ? { ...o } : { date: today(), ...preset }, onSubmit: async d => { const r = await api("saveOrder", { ...d, id: o?.id }); UI.sel.bestellungen = r.id; return r.message; } });
@@ -478,9 +472,9 @@ function purchaseDialog() {
       ["model", "Modell", "text", { hint: "leer = aus Katalog" }], ["make", "Hersteller", "text", { hint: "leer = aus Katalog" }], ["cat", "Klasse", "select", { options: CATS.map(c => [c, c]), empty: "–" }],
       ["color", "Farbe"], ["plate", "Kennzeichen"], ["vin", "Fahrgestellnummer (FIN)"], ["year", "Baujahr", "int"], ["km", "Kilometerstand", "int"],
       ["price", "Ankaufpreis", "money"], ["vk", "Geplanter Verkaufspreis", "money"], ["pay", "Zahlungsart", "select", { options: Object.entries(PAY) }], ["date", "Ankaufdatum", "date"],
-      ["margin", "Differenzbesteuerung (Ankauf von Privat)", "check"], ["pnotes", "Vereinbarungen / bekannte Mängel", "area"]],
+      ["pnotes", "Vereinbarungen / bekannte Mängel", "area"]],
     modelFill: { make: "make", model: "model", cat: "cat" },
-    values: { date: today(), pay: "bank", margin: true }, submit: "Ankauf buchen",
+    values: { date: today(), pay: "bank" }, submit: "Ankauf buchen",
     onSubmit: async d => { const r = await api("purchase", d); UI.sel.ankauf = r.id; return r.message; } });
 }
 function customerDialog(c) {
@@ -490,7 +484,7 @@ function customerDialog(c) {
 }
 function modelDialog(m) {
   form({ title: m ? "Modell bearbeiten" : "Neues Modell", fields: [["model", "Modell"], ["make", "Hersteller / Marke"], ["cat", "Klasse", "select", { options: CATS.map(c => [c, c]), empty: "–" }],
-    ["ek", "Einkaufspreis (brutto)", "money"], ["vk", "Verkaufspreis (brutto)", "money"], ["active", "Aktiv", "check"]],
+    ["ek", "Einkaufspreis", "money"], ["vk", "Verkaufspreis", "money"], ["active", "Aktiv", "check"]],
     values: m || { active: true }, onSubmit: async d => { const r = await api("saveModel", { ...d, id: m?.id }); UI.sel.katalog = r.id; return r.message; } });
 }
 function userDialog(u) {
@@ -530,14 +524,12 @@ function vTable(v) {
 }
 function sumTable(rows) { return `<table class="sum">${rows.map(([l, v, b]) => `<tr class="${b ? "b" : ""}"><td style="text-align:right;width:auto;color:inherit">${l}</td><td style="text-align:right;width:28%">${money(v)}</td></tr>`).join("")}</table>`; }
 function contractSale(s) {
-  const v = byId("vehicles", s.vehicleId), c = byId("customers", s.customerId), tv = s.tradeId && byId("vehicles", s.tradeId), r = Number(S.settings.vat) || 0;
-  const rows = [["Kaufpreis (brutto)", s.price, 1]];
-  if (!v.margin && r) rows.push([`darin enthaltene USt ${String(r).replace(".", ",")} %`, s.tax]);
+  const v = byId("vehicles", s.vehicleId), c = byId("customers", s.customerId), tv = s.tradeId && byId("vehicles", s.tradeId);
+  const rows = [["Kaufpreis", s.price, 1]];
   if (tv) rows.push(["abzgl. Inzahlungnahme " + tv.nr, s.tradeValue]);
   rows.push([`Zahlbetrag (${PAY[s.pay]})`, s.price - s.tradeValue, 1]);
   info("Kaufvertrag " + s.nr, paperHead("Kaufvertrag", s.nr, s.date, c, "Käufer") + (s.status === "storno" ? `<div class="stamp">STORNIERT</div>` : "") +
     `<h4>Kaufgegenstand</h4>${vTable(v)}${tv ? `<h4>In Zahlung genommenes Fahrzeug</h4>${vTable(tv)}` : ""}<h4>Preis</h4>${sumTable(rows)}` +
-    (v.margin && r ? `<p style="font-size:11px;color:var(--ink-muted)">Differenzbesteuerung gem. § 25a UStG. Umsatzsteuer wird nicht gesondert ausgewiesen.</p>` : "") +
     (s.notes ? `<p>Vereinbarungen: ${esc(s.notes)}</p>` : "") + `<p>Verkäufer: ${esc(s.seller)}</p><div class="sign"><div>Unterschrift Käufer</div><div>Unterschrift Verkäufer</div></div></div>` +
     `<p class="foot">Zum Drucken: Strg + P (am Mac: Cmd + P).</p>`, true);
 }
@@ -550,7 +542,7 @@ function contractPurchase(p) {
 }
 function contractOrder(o) {
   const m = byId("models", o.modelId), c = o.customerId ? byId("customers", o.customerId) : { name: "Lagerbestellung", nr: "–" };
-  const rows = o.customerId ? [["Vereinbarter Kaufpreis (brutto)", o.vk, 1], ...(o.deposit ? [["geleistete Anzahlung", o.deposit], ["Restbetrag bei Übergabe", o.vk - o.deposit, 1]] : [])] : [["Einkaufspreis (brutto)", o.ek, 1]];
+  const rows = o.customerId ? [["Vereinbarter Kaufpreis", o.vk, 1], ...(o.deposit ? [["geleistete Anzahlung", o.deposit], ["Restbetrag bei Übergabe", o.vk - o.deposit, 1]] : [])] : [["Einkaufspreis", o.ek, 1]];
   info("Bestellung " + o.nr, paperHead("Fahrzeugbestellung", o.nr, o.date, c, "Besteller") +
     `<h4>Fahrzeug</h4><table><tr><td>Modell</td><td>${esc(m.make + " " + m.model)}</td></tr><tr><td>Klasse</td><td>${esc(m.cat)}</td></tr>${o.color ? `<tr><td>Farbe</td><td>${esc(o.color)}</td></tr>` : ""}${o.expected ? `<tr><td>Voraussichtliche Lieferung</td><td>${de(o.expected)}</td></tr>` : ""}</table>
     <h4>Preis</h4>${sumTable(rows)}${o.customerId ? `<div class="sign"><div>Unterschrift Besteller</div><div>Unterschrift Autohaus</div></div>` : ""}</div>`, true);
@@ -627,7 +619,7 @@ document.addEventListener("change", e => {
 document.addEventListener("submit", async e => {
   if (e.target.id !== "setForm") return;
   e.preventDefault();
-  try { const r = await api("settings", { company: $("#setCompany").value, vat: $("#setVat").value }); render(); toast(r.message); }
+  try { const r = await api("settings", { company: $("#setCompany").value }); render(); toast(r.message); }
   catch (err) { toast(err.message); }
 });
 

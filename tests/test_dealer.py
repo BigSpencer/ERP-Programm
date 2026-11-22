@@ -13,6 +13,7 @@ def s(db_url):
     db.connect(db_url)
     db.init_schema()
     with db.session_scope() as session:
+        set_setting(session, "vehicle_vat_rate", "19")   # Steuerlogik weiterhin prüfen (Standard ist 0)
         yield session
 
 

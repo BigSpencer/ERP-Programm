@@ -54,7 +54,7 @@ def test_json_required(client):
 def test_dealer_flow_over_api(client):
     login(client)
     client.post("/api/password", json={"old": "admin", "new": "geheim123"})
-    do(client, "settings", {"company": "Premium Deluxe Motorsport", "vat": "0"})
+    do(client, "settings", {"company": "Premium Deluxe Motorsport"})
     mid = do(client, "saveModel", {"make": "Aurelio", "model": "GT", "cat": "Sportwagen", "ek": "100.000", "vk": "130.000",
                                    "active": True})["id"]
     cid = do(client, "saveCustomer", {"name": "Testkunde"})["id"]
@@ -69,7 +69,12 @@ def test_dealer_flow_over_api(client):
                             "margin": True})
     do(client, "importModels", {"text": "Hersteller;Modell;EK;VK\nNova;Van;20.000;30.000\n"})
     st = client.get("/api/state").json()
-    assert st["settings"]["vat"] == 0
+    assert "vat" not in st["settings"] and "margin" not in st["vehicles"][0] and "tax" not in st["sales"][0]
+    from erp import db as _db
+    from erp.services import finance
+    with _db.session_scope() as s:                       # Verkauf ohne Steuer gebucht
+        bal = {a.number: saldo for a, _, _, saldo in finance.balances(s)}
+    assert bal["1776"] == 0 and bal["8400"] == -130000
     v = next(x for x in st["vehicles"] if x["id"] == vid)
     assert v["status"] == "verkauft" and v["ek"] == 100000
     assert {x["status"] for x in st["vehicles"]} == {"verkauft", "reserviert", "lager"}
@@ -94,7 +99,7 @@ def test_roles_limit_actions(client):
     assert "verkauf" not in st["me"]["views"] and "bestand" in st["me"]["views"]
     assert "users" not in st
     do(client, "sell", {"vehicleId": "1", "customerId": "1"}, 403)
-    do(client, "settings", {"company": "X", "vat": "0"}, 403)
+    do(client, "settings", {"company": "X"}, 403)
 
 
 def test_index_served(client):
