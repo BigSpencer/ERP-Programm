@@ -71,8 +71,8 @@ def change_password(s: Session, user_id: int, old: str, new: str) -> None:
     user = s.get(m.User, user_id)
     if not verify_password(old, user.password_hash):
         raise BusinessError("Altes Passwort ist falsch")
-    if len(new) < 6:
-        raise BusinessError("Das neue Passwort muss mindestens 6 Zeichen haben")
+    if not new:
+        raise BusinessError("Bitte ein neues Passwort eingeben")
     user.password_hash = hash_password(new)
     audit(s, "password", "user", user.id)
 

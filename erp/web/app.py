@@ -321,8 +321,6 @@ def a_settings(s, b):
 def a_save_user(s, b):
     uid = _id(b.get("id"))
     password = b.get("password") or None
-    if password and len(password) < 8:
-        raise BusinessError("Das Passwort muss mindestens 8 Zeichen haben")
     u = auth.save_user(s, uid, _str(b.get("username")), _str(b.get("fullName")), _str(b.get("role")),
                        bool(b.get("active", True)), password)
     return {"id": _s(u.id), "message": f"Benutzer {u.username} gespeichert"}
@@ -496,8 +494,8 @@ def create_app(url: str | None = None) -> FastAPI:
             if user is None:
                 return _error(401, "Bitte anmelden")
             new = data.get("new") or ""
-            if len(new) < 8:
-                raise BusinessError("Das neue Passwort muss mindestens 8 Zeichen haben")
+            if not new:
+                raise BusinessError("Bitte ein neues Passwort eingeben")
             if new == DEFAULT_PASSWORD:
                 raise BusinessError("Bitte ein anderes Passwort wählen")
             auth.change_password(s, user.id, data.get("old") or "", new)

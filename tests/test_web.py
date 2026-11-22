@@ -35,8 +35,8 @@ def test_login_required_and_default_password_must_change(client):
     st = login(client)
     assert st["me"]["mustChangePassword"] is True
     do(client, "saveCustomer", {"name": "X"}, 403)           # gesperrt bis zum Passwortwechsel
-    r = client.post("/api/password", json={"old": "admin", "new": "kurz"})
-    assert r.status_code == 400
+    assert client.post("/api/password", json={"old": "admin", "new": ""}).status_code == 400
+    assert client.post("/api/password", json={"old": "admin", "new": "admin"}).status_code == 400
     assert client.post("/api/password", json={"old": "admin", "new": "geheim123"}).status_code == 200
     assert client.get("/api/state").json()["me"]["mustChangePassword"] is False
     client.post("/api/logout", json={})
@@ -87,7 +87,8 @@ def test_roles_limit_actions(client):
     client.post("/api/password", json={"old": "admin", "new": "geheim123"})
     do(client, "saveUser", {"username": "lager", "fullName": "Lars", "role": "warehouse", "password": "lager1234",
                             "active": True})
-    do(client, "saveUser", {"username": "kurz", "role": "sales", "password": "123"}, 400)
+    do(client, "saveUser", {"username": "kurz", "role": "sales", "password": "1"})          # keine Mindestlänge
+    do(client, "saveUser", {"username": "ohne", "role": "sales", "password": ""}, 400)      # aber nicht leer
     client.post("/api/logout", json={})
     st = login(client, "lager", "lager1234")
     assert "verkauf" not in st["me"]["views"] and "bestand" in st["me"]["views"]

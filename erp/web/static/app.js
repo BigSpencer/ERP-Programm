@@ -475,12 +475,12 @@ function modelDialog(m) {
 function userDialog(u) {
   form({ title: u ? `Benutzer ${esc(u.username)} bearbeiten` : "Neuer Benutzer",
     fields: [["username", "Benutzername"], ["fullName", "Name (erscheint als Verkäufer)"], ["role", "Rolle", "select", { options: Object.entries(S.roles) }],
-      ["password", u ? "Neues Passwort (leer = unverändert)" : "Passwort (mind. 8 Zeichen)", "password"], ["active", "Aktiv", "check"]],
+      ["password", u ? "Neues Passwort (leer = unverändert)" : "Passwort", "password"], ["active", "Aktiv", "check"]],
     values: u || { role: "sales", active: true }, onSubmit: async d => { const r = await api("saveUser", { ...d, id: u?.id }); UI.sel.benutzer = r.id; return r.message; } });
 }
 function passwordDialog(forced) {
   form({ title: forced ? "Neues Passwort festlegen" : "Passwort ändern", noCancel: forced,
-    sub: forced ? "Du verwendest noch das Standardpasswort. Lege jetzt ein eigenes Passwort mit mindestens 8 Zeichen fest." : "",
+    sub: forced ? "Du verwendest noch das Standardpasswort. Lege jetzt ein eigenes Passwort fest." : "",
     fields: [["old", "Aktuelles Passwort", "password", { ac: "current-password" }], ["new", "Neues Passwort", "password"], ["new2", "Neues Passwort wiederholen", "password"]],
     values: forced ? { old: "admin" } : {}, submit: "Passwort speichern",
     onSubmit: async d => {
