@@ -190,3 +190,20 @@ td .btn.sm:hover { background: var(--gold); color: var(--on-gold); border-color:
 @media (max-width: 1000px) { .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } .filters .fend { grid-column: span 1; } }
 @media (max-width: 560px) { .filters { grid-template-columns: minmax(0, 1fr); } .filters .range, .filters .fend { grid-column: 1 / -1; } }
 .who .ver { font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
+
+/* Logo */
+.loginLogo { display: block; width: 150px; height: 150px; margin: 0 auto 4px; filter: drop-shadow(0 6px 22px rgba(201, 162, 77, .22)); }
+.loginCard .brand.big { text-align: center; }
+.loginCard .brand.big span { justify-content: center; }
+.loginCard .brand.big span::after { content: ""; width: 22px; height: 1px; background: var(--gold-dark); }
+.brandRow { display: flex; align-items: center; gap: 12px; padding: 20px 16px 14px 18px; text-decoration: none; color: inherit; }
+.brandRow .brand { padding: 0; min-width: 0; }
+.brandRow .brand b { font-size: 12.5px; letter-spacing: .14em; }
+.brandRow .brand span { font-size: 8px; letter-spacing: .36em; margin-top: 4px; }
+.brandRow .brand span::before { width: 14px; }
+.sideLogo { width: 54px; height: 54px; flex: none; filter: drop-shadow(0 2px 10px rgba(201, 162, 77, .18)); }
+@media (max-width: 760px) {
+  .brandRow { padding: 10px max(16px, env(safe-area-inset-left, 0px)) 4px; gap: 10px; }
+  .sideLogo { width: 38px; height: 38px; }
+  .brandRow .brand b { font-size: 11px; }
+}
