@@ -149,7 +149,7 @@ class CockpitPage(QWidget):
 
 class VehicleModelsPage(ListPage):
     title = "Fahrzeugkatalog – Modelle und Preise"
-    columns = ["Nr.", "Hersteller", "Modell", "Klasse", "EK (brutto)", "VK (brutto)", "Marge",
+    columns = ["Nr.", "Modell", "Hersteller", "Klasse", "EK (brutto)", "VK (brutto)", "Marge",
                "Marge %", "Lieferant", "Im Bestand", "Aktiv"]
 
     def __init__(self, parent=None):
@@ -173,7 +173,7 @@ class VehicleModelsPage(ListPage):
         rows = []
         for x in dealer.search_models(s, text, self.only_active.isChecked()):
             pct = float(x.margin / x.sales_price * 100) if x.sales_price else 0
-            rows.append((x.id, [x.number, x.make, x.model, x.category, num(x.purchase_price),
+            rows.append((x.id, [x.number, x.model, x.make, x.category, num(x.purchase_price),
                                 num(x.sales_price), num(x.margin), (f"{pct:.1f} %".replace(".", ","), pct),
                                 x.default_supplier.name if x.default_supplier else "",
                                 num(counts.get(x.id, 0), "qty"), "ja" if x.active else "nein"]))

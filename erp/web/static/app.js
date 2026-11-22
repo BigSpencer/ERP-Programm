@@ -270,15 +270,47 @@ function kunden() {
 }
 
 /* Katalog */
+const CAT_FILTER = { make: "", cat: "", ekMin: "", ekMax: "", vkMin: "", vkMax: "", marginMin: "", status: "alle", stock: "" };
+UI.cf = { ...CAT_FILTER };
+UI.cfOpen = false;
+function fnum(v) { if (v === "" || v === undefined) return null; try { return parseMoney(v); } catch (e) { return null; } }
+function catFilterCount() { return Object.entries(CAT_FILTER).filter(([k, v]) => String(UI.cf[k] ?? "") !== String(v)).length; }
+
 function katalog() {
   const inStock = {}; S.vehicles.filter(v => AVAILABLE.includes(v.status)).forEach(v => inStock[v.modelId] = (inStock[v.modelId] || 0) + 1);
-  const list = S.models.filter(m => match([m.nr, m.make, m.model, m.cat].join(" "))).sort((a, b) => (a.make + a.model).localeCompare(b.make + b.model));
+  const f = UI.cf, ekMin = fnum(f.ekMin), ekMax = fnum(f.ekMax), vkMin = fnum(f.vkMin), vkMax = fnum(f.vkMax), mMin = fnum(f.marginMin);
+  const pct = m => m.vk ? (m.vk - m.ek) / m.vk * 100 : 0;
+  const list = S.models.filter(m => match([m.nr, m.make, m.model, m.cat].join(" "))
+    && (!f.make || m.make === f.make) && (!f.cat || m.cat === f.cat)
+    && (ekMin === null || m.ek >= ekMin) && (ekMax === null || m.ek <= ekMax)
+    && (vkMin === null || m.vk >= vkMin) && (vkMax === null || m.vk <= vkMax)
+    && (mMin === null || pct(m) >= mMin)
+    && (f.status === "alle" || (f.status === "aktiv") === m.active)
+    && (!f.stock || (f.stock === "ja") === !!inStock[m.id]))
+    .sort((a, b) => (a.model + a.make).localeCompare(b.model + b.make));
+  const canOrder = allowed("bestellungen");
+  const makes = [...new Set(S.models.map(m => m.make))].sort((a, b) => a.localeCompare(b));
+  const cats = [...new Set(S.models.map(m => m.cat).filter(Boolean).concat(CATS))].sort((a, b) => a.localeCompare(b));
+  const n = catFilterCount();
+  const sel = (id, label, options, val) => `<label>${label}<select id="${id}" data-cf>${options.map(([v, l]) => `<option value="${esc(v)}" ${String(v) === String(val) ? "selected" : ""}>${esc(l)}</option>`).join("")}</select></label>`;
+  const inp = (id, label, val, hint) => `<label>${label}<input id="${id}" data-cf inputmode="decimal" value="${esc(val)}" placeholder="${hint}"></label>`;
+  const panel = UI.cfOpen ? `<div class="filters">
+      ${sel("cf_make", "Hersteller", [["", "Alle Hersteller"], ...makes.map(x => [x, x])], f.make)}
+      ${sel("cf_cat", "Klasse", [["", "Alle Klassen"], ...cats.map(x => [x, x])], f.cat)}
+      ${sel("cf_status", "Status", [["alle", "Aktive und inaktive"], ["aktiv", "Nur aktive"], ["inaktiv", "Nur inaktive"]], f.status)}
+      ${sel("cf_stock", "Im Bestand", [["", "Egal"], ["ja", "Mindestens 1 im Bestand"], ["nein", "Nicht im Bestand"]], f.stock)}
+      <fieldset class="range"><legend>Einkaufspreis (EK)</legend>${inp("cf_ekMin", "von", f.ekMin, "0")}${inp("cf_ekMax", "bis", f.ekMax, "unbegrenzt")}</fieldset>
+      <fieldset class="range"><legend>Verkaufspreis (VK)</legend>${inp("cf_vkMin", "von", f.vkMin, "0")}${inp("cf_vkMax", "bis", f.vkMax, "unbegrenzt")}</fieldset>
+      ${inp("cf_marginMin", "Marge mindestens (%)", f.marginMin, "z. B. 20")}
+      <div class="fend">${btn("cfReset", "Filter zurücksetzen")}</div></div>` : "";
   return head("Stammdaten", "Fahrzeugkatalog", "Modelle mit Standard-Einkaufs- und Verkaufspreis. Grundlage für Bestellungen und neue Fahrzeuge.") +
-    `<div class="bar">${searchBox("Hersteller, Modell, Klasse …")}<span class="grow"></span>${btn("mNew", "Neues Modell", "primary")}${btn("mEdit", "Bearbeiten")}
-    ${allowed("bestellungen") ? btn("mOrder", "Bestellen") : ""}${btn("mImport", "CSV-Import")}</div>` +
-    tbl([["Nr."], ["Hersteller"], ["Modell"], ["Klasse", 0, 1], ["EK", 1], ["VK", 1], ["Marge", 1], ["Marge %", 1], ["Im Bestand", 1], ["Aktiv"]],
-      list.map(m => ({ id: m.id, cells: [m.nr, esc(m.make), esc(m.model), esc(m.cat), num(m.ek), num(m.vk), num(m.vk - m.ek), m.vk ? ((m.vk - m.ek) / m.vk * 100).toFixed(1).replace(".", ",") + " %" : "–", inStock[m.id] || 0, m.active ? "ja" : "nein"] })),
-      "Noch keine Modelle. Lege ein Modell an oder importiere deine Tabelle als CSV-Datei.");
+    `<div class="bar">${searchBox("Modell, Hersteller, Klasse …")}<button class="btn ${n ? "on" : ""}" data-a="cfToggle" aria-expanded="${UI.cfOpen}">Filter${n ? ` · ${n} aktiv` : ""} ${UI.cfOpen ? "▴" : "▾"}</button>
+    <span class="grow"></span>${btn("mNew", "Neues Modell", "primary")}${btn("mEdit", "Bearbeiten")}${btn("mImport", "CSV-Import")}</div>${panel}` +
+    tbl([["Nr."], ["Modell"], ["Hersteller"], ["Klasse", 0, 1], ["EK", 1], ["VK", 1], ["Marge", 1], ["Marge %", 1], ["Im Bestand", 1], ["Aktiv"], ...(canOrder ? [[""]] : [])],
+      list.map(m => ({ id: m.id, cells: [m.nr, esc(m.model), esc(m.make), esc(m.cat), num(m.ek), num(m.vk), num(m.vk - m.ek), m.vk ? pct(m).toFixed(1).replace(".", ",") + " %" : "–", inStock[m.id] || 0, m.active ? "ja" : "nein",
+        ...(canOrder ? [m.active ? `<button class="btn sm" data-a="mOrderRow" data-id="${esc(m.id)}" title="${esc(m.make + " " + m.model)} bestellen">Bestellen</button>` : `<span class="dim">inaktiv</span>`] : [])] })),
+      S.models.length ? "Kein Modell passt zu den Filtern." : "Noch keine Modelle. Lege ein Modell an oder importiere deine Tabelle als CSV-Datei.") +
+    `<div class="foot">${list.length} von ${S.models.length} Modell(en)${list.length ? ` · EK ${money(Math.min(...list.map(m => m.ek)))} bis ${money(Math.max(...list.map(m => m.ek)))}` : ""}</div>`;
 }
 
 /* Firmendaten */
@@ -531,7 +563,9 @@ const ACTIONS = {
     info("Fahrzeughistorie · " + esc(c.name), `<div class="tablewrap hist"><table><thead><tr><th>Datum</th><th>Vorgang</th><th>Beleg</th><th>Fahrzeug</th><th class="n">Betrag</th></tr></thead><tbody>${h.length ? h.map(r => `<tr><td>${de(r[0])}</td><td>${esc(r[1])}</td><td>${r[2]}</td><td>${esc(r[3])}</td><td class="n">${num(r[4])}</td></tr>`).join("") : `<tr><td colspan="5" class="empty">Noch keine Fahrzeugvorgänge.</td></tr>`}</tbody></table></div>`, true); },
   mNew: () => modelDialog(null),
   mEdit: () => { const m = selected("models", "ein Modell"); m && modelDialog(m); },
-  mOrder: () => { const m = selected("models", "ein Modell"); m && orderDialog(null, { modelId: m.id }); },
+  mOrderRow: el => orderDialog(null, { modelId: el.dataset.id }),
+  cfToggle: () => { UI.cfOpen = !UI.cfOpen; render(); if (UI.cfOpen) $("#cf_make")?.focus(); },
+  cfReset: () => { UI.cf = { ...CAT_FILTER }; render(); },
   mImport: importDialog,
   uNew: () => userDialog(null),
   uEdit: () => { const u = selected("users", "einen Benutzer"); u && userDialog(u); },
@@ -541,15 +575,20 @@ async function act(fn) { try { const r = await fn(); render(); r?.message && toa
 
 document.addEventListener("click", e => {
   const a = e.target.closest("[data-a]");
-  if (a) { e.preventDefault(); ACTIONS[a.dataset.a]?.(); return; }
+  if (a) { e.preventDefault(); ACTIONS[a.dataset.a]?.(a); return; }
   if (e.target.id === "ov" && $("#ov [data-a=close]")) { close(); return; }   // Pflicht-Dialoge bleiben offen
   const tr = e.target.closest("#main tbody tr[data-id]");
   if (tr) { UI.sel[UI.view] = tr.dataset.id; document.querySelectorAll("#main tbody tr.sel").forEach(x => x.classList.remove("sel")); tr.classList.add("sel"); }
 });
-document.addEventListener("dblclick", e => { if (e.target.closest("#main tbody tr[data-id]") && DOUBLE[UI.view]) ACTIONS[DOUBLE[UI.view]](); });
+document.addEventListener("dblclick", e => { if (!e.target.closest("button") && e.target.closest("#main tbody tr[data-id]") && DOUBLE[UI.view]) ACTIONS[DOUBLE[UI.view]](); });
 document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#ov") && $("#ov [data-a=close]")) close(); });
 document.addEventListener("input", e => {
   if (e.target.id === "q") { UI.q[UI.view] = e.target.value; const pos = e.target.selectionStart; render(); const q = $("#q"); q.focus(); q.setSelectionRange(pos, pos); }
+  if (e.target.matches("[data-cf]")) {           // Katalogfilter: sofort anwenden, Fokus behalten
+    const id = e.target.id, isText = e.target.tagName === "INPUT", pos = isText ? e.target.selectionStart : null;
+    UI.cf[id.slice(3)] = e.target.value; render();
+    const el = document.getElementById(id); if (el) { el.focus(); if (isText) el.setSelectionRange(pos, pos); }
+  }
 });
 document.addEventListener("change", e => {
   const t = e.target;
