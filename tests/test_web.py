@@ -97,7 +97,12 @@ def test_roles_limit_actions(client):
 
 
 def test_index_served(client):
+    from erp.web.app import asset_version
     r = client.get("/")
-    assert r.status_code == 200 and "app.js" in r.text
+    v = asset_version()
+    assert r.status_code == 200 and f"/static/app.js?v={v}" in r.text and f"/static/app.css?v={v}" in r.text
+    assert r.headers["cache-control"] == "no-cache"
+    assert "immutable" in client.get(f"/static/app.js?v={v}").headers["cache-control"]
+    assert client.get("/static/app.js").headers["cache-control"] == "no-cache"
     assert client.get("/static/app.js").status_code == 200
     assert client.get("/healthz").json() == {"ok": True}

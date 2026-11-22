@@ -44,7 +44,12 @@ async function request(path, body) {
   if (!res.ok) throw new Fehler(data.error || `Fehler ${res.status}`);
   return data;
 }
-async function reload() { S = await request("/api/state"); }
+let loadedVersion = null;
+async function reload() {
+  S = await request("/api/state");
+  if (loadedVersion && S.version !== loadedVersion) { location.reload(); return; }   // Update eingespielt -> neue Oberfläche laden
+  loadedVersion = S.version;
+}
 async function api(name, body) { const r = await request("/api/action/" + name, body); await reload(); return r; }
 
 /* ------------------------------------------------------------------ Begriffe */
@@ -126,7 +131,8 @@ function renderNav() {
   setBrand("#brandTop", "#brandSub");
   document.title = S.settings.company + " · ERP";
   $("#who").innerHTML = `<span>Angemeldet als</span><b>${esc(S.me.fullName || S.me.username)}</b><span>${esc(S.me.roleName)}</span>
-    <div class="links"><button data-a="pw">Passwort ändern</button><button data-a="logout">Abmelden</button></div>`;
+    <div class="links"><button data-a="pw">Passwort ändern</button><button data-a="logout">Abmelden</button></div>
+    <span class="ver" title="Programmversion">Version ${esc(S.version)}</span>`;
 }
 function render() {
   if (!S) return;

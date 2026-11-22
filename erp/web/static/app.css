@@ -189,3 +189,4 @@ td .btn.sm:hover { background: var(--gold); color: var(--on-gold); border-color:
 .filters .fend { grid-column: span 3; display: flex; justify-content: flex-end; }
 @media (max-width: 1000px) { .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } .filters .fend { grid-column: span 1; } }
 @media (max-width: 560px) { .filters { grid-template-columns: minmax(0, 1fr); } .filters .range, .filters .fend { grid-column: 1 / -1; } }
+.who .ver { font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }

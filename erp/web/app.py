@@ -17,18 +17,20 @@ gemeinsamen Service-Schicht und gelten damit identisch für Desktop und Web.
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import logging
 import os
 import secrets
 import json
 import time
 from contextlib import asynccontextmanager
+from functools import lru_cache
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Callable
 
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
@@ -117,7 +119,7 @@ def state(s, user: m.User) -> dict:
     """Kompletter Datenbestand in dem Format, das die Oberfläche erwartet."""
     vehicles = s.scalars(select(m.Vehicle)).all()
     data = {
-        "version": __version__,
+        "version": f"{__version__} · {asset_version()[:7]}",
         "me": me(s, user),
         "settings": {"company": get_setting(s, "company_name"), "vat": float(dealer.vat_rate(s)),
                      "seller": user.full_name or user.username},
@@ -355,6 +357,23 @@ EXTRA_MODULES = {"reserve": ("vehicle_sales", "showroom"), "showroom": ("showroo
 # Anwendung
 # --------------------------------------------------------------------------
 
+@lru_cache(maxsize=1)
+def asset_version() -> str:
+    """Prüfsumme über die Oberflächen-Dateien – ändert sich mit jedem Update."""
+    h = hashlib.sha256()
+    for name in ("app.js", "app.css", "index.html"):
+        h.update((STATIC / name).read_bytes())
+    return h.hexdigest()[:12]
+
+
+@lru_cache(maxsize=1)
+def index_html() -> str:
+    v = asset_version()
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    return (html.replace("/static/app.js", f"/static/app.js?v={v}")
+                .replace("/static/app.css", f"/static/app.css?v={v}"))
+
+
 def _error(status: int, message: str) -> JSONResponse:
     return JSONResponse({"error": message}, status_code=status)
 
@@ -392,6 +411,11 @@ def create_app(url: str | None = None) -> FastAPI:
         response.headers["Referrer-Policy"] = "same-origin"
         if request.url.path.startswith("/api/"):
             response.headers["Cache-Control"] = "no-store"
+        elif request.url.path.startswith("/static/"):
+            # Dateien tragen ?v=<Prüfsumme>; ohne passende Version immer neu prüfen
+            response.headers["Cache-Control"] = ("public, max-age=31536000, immutable"
+                                                 if request.query_params.get("v") == asset_version()
+                                                 else "no-cache")
         return response
 
     def current_user(s, request: Request) -> m.User | None:
@@ -506,7 +530,7 @@ def create_app(url: str | None = None) -> FastAPI:
 
     @app.get("/")
     def index():
-        return FileResponse(STATIC / "index.html", headers={"Cache-Control": "no-cache"})
+        return HTMLResponse(index_html(), headers={"Cache-Control": "no-cache"})
 
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
     return app
