@@ -1,6 +1,7 @@
 """Geschäftslogik – unabhängig von der Oberfläche und damit testbar."""
 from __future__ import annotations
 
+import contextvars
 from decimal import Decimal, InvalidOperation
 
 from sqlalchemy import select
@@ -13,17 +14,27 @@ class BusinessError(Exception):
     """Fachlicher Fehler, der dem Anwender angezeigt wird."""
 
 
+_current_user: contextvars.ContextVar[tuple[str, str]] = contextvars.ContextVar(
+    "erp_current_user", default=("system", "admin"))
+
+
 class _Context:
-    username: str = "system"
-    role: str = "admin"
+    """Angemeldeter Benutzer – je Thread/Anfrage getrennt (wichtig für den Webserver)."""
+
+    @property
+    def username(self) -> str:
+        return _current_user.get()[0]
+
+    @property
+    def role(self) -> str:
+        return _current_user.get()[1]
 
 
 context = _Context()
 
 
 def set_user(user: m.User | None) -> None:
-    context.username = user.username if user else "system"
-    context.role = user.role if user else "admin"
+    _current_user.set((user.username, user.role) if user else ("system", "admin"))
 
 
 def audit(s: Session, action: str, entity: str, entity_id="", details: str = "") -> None:

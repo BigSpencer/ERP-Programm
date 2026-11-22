@@ -1,0 +1,20 @@
+# Render-Blueprint: legt Web-Dienst und PostgreSQL-Datenbank in Frankfurt an.
+# Render → New → Blueprint → dieses Repository wählen.
+services:
+  - type: web
+    name: pdm-erp
+    runtime: python
+    region: frankfurt
+    buildCommand: pip install -r requirements-web.txt
+    startCommand: uvicorn erp.web.app:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips '*'
+    healthCheckPath: /healthz
+    envVars:
+      - key: ERP_DATABASE_URL
+        fromDatabase:
+          name: pdm-erp-db
+          property: connectionString
+      - key: ERP_SECRET_KEY
+        generateValue: true
+databases:
+  - name: pdm-erp-db
+    region: frankfurt

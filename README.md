@@ -37,6 +37,42 @@ CSV-Import*. Erkannte Spalten: *Hersteller/Marke*, *Modell/Fahrzeug/Name*, *Klas
 *EK/Einkaufspreis*, *VK/Verkaufspreis/Preis* (auch `$ 1.250.000` oder `80.000,00`).
 Kunden- und Kaufdaten werden bewusst nicht importiert.
 
+## Web-Version (Browser, z. B. auf Render oder Hetzner)
+
+Dieselben Autohaus-Funktionen laufen auch als Website mit Anmeldung, Rollen und gemeinsamer
+Datenbank (`erp/web/`). Die Geschäftsregeln sind identisch mit dem Desktop-Programm.
+
+**Render.com (Web Service):**
+
+| Feld | Wert |
+|---|---|
+| Branch | der Branch mit der Web-Version |
+| Runtime | Python 3 |
+| Build Command | `pip install -r requirements-web.txt` |
+| Start Command | `uvicorn erp.web.app:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips '*'` |
+| Health Check Path | `/healthz` |
+
+Umgebungsvariablen:
+
+| Variable | Wert |
+|---|---|
+| `ERP_DATABASE_URL` | *Internal Database URL* der Render-PostgreSQL-Datenbank |
+| `ERP_SECRET_KEY` | lange Zufallszeichenfolge (Render: *Generate*) |
+| `ERP_ADMIN_PASSWORD` | optional: Startpasswort für `admin` |
+
+Alternativ legt `render.yaml` (Render → *New → Blueprint*) Web-Dienst und Datenbank in einem Schritt an.
+
+Erste Anmeldung mit `admin` / `admin` (bzw. `ERP_ADMIN_PASSWORD`). Solange das Standardpasswort
+aktiv ist, lässt die Web-Version nichts anderes zu als den Passwortwechsel. Danach unter
+*System → Benutzer* die Mitarbeiter mit ihren Rollen anlegen.
+
+**Lokal ausprobieren:**
+
+```bash
+pip install -r requirements-web.txt
+ERP_INSECURE_COOKIES=1 uvicorn erp.web.app:app --reload     # http://127.0.0.1:8000
+```
+
 ---
 
 Ein modulares ERP-System nach dem Vorbild klassischer Unternehmenssoftware (Module
