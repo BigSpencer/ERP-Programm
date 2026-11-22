@@ -19,6 +19,7 @@ Kaufdaten**; diese werden ausschließlich im laufenden Betrieb in der eigenen Da
 | **Verkauf** | Kaufvertrag (KV-…) mit Listen- oder Verhandlungspreis, Bar/Überweisung, optionaler Inzahlungnahme (Fahrzeug geht automatisch als Gebrauchtwagen in den Bestand) · Rohertrag je Verkauf · Storno mit Gegenbuchung · Kaufvertrag als PDF/Druck · Auswertung nach Verkäufer und Modell |
 | **Gebrauchtwagen-Ankauf** | Status beim Erfassen: *Angekauft* (sofort bezahlt, Fahrzeug im Bestand) oder *Inzahlungnahme* (Fahrzeug vorgemerkt, wird bei der Übergabe eines verkauften Fahrzeugs über eine Auswahlliste verrechnet → *Verrechnet*) · Storno · Vertrag als PDF/Druck |
 | **Fahrzeugkatalog** | Modelle mit Standard-EK und -VK, Marge in € und %, Bestand je Modell · **CSV-Import** (z. B. aus Google Sheets) |
+| **Administration** (nur Admins, Web) | *Endgültig löschen* in jeder Liste (unabhängig vom Status, abhängige Einträge werden im Bestätigungsfenster genannt) · *Datenbank bereinigen* in den Firmendaten (alle Geschäftsdaten; Benutzer, Firmendaten, Kontenplan und wahlweise der Katalog bleiben; Bestätigung mit „LÖSCHEN“ und Passwort) |
 | **Kunden** | Kundenstamm plus **Fahrzeughistorie** je Kunde (Käufe, Inzahlungnahmen, Ankäufe, Bestellungen, Reservierungen) |
 
 Fahrzeugpreise werden brutto geführt. Automatische Buchungen in der Finanzbuchhaltung:
@@ -151,7 +152,7 @@ ausführen (Netzfreigabe in `pg_hba.conf`/`postgresql.conf` beachten, siehe Date
 Der GitHub-Actions-Workflow baut bei jedem Push fertige Pakete
 (Actions → *Tests & Installer* → Artefakte):
 
-* Windows: `ERPDesk-Setup-1.4.0.exe` (Installer mit Startmenü- und Desktop-Verknüpfung)
+* Windows: `ERPDesk-Setup-1.5.0.exe` (Installer mit Startmenü- und Desktop-Verknüpfung)
 * macOS / Linux: Ordner `ERPDesk/` mit ausführbarer Datei
 
 Selbst bauen:

@@ -163,3 +163,55 @@ def test_trade_in_selection_over_api(client):
     assert p["status"] == "verrechnet" and p["saleId"] == st["sales"][0]["id"]
     assert st["sales"][0]["tradeValue"] == 8000
     do(client, "purchaseStatus", {"id": pid, "status": "storniert"}, 400)   # verrechnet -> erst Verkauf stornieren
+
+
+def _filled(client):
+    login(client)
+    client.post("/api/password", json={"old": "admin", "new": "geheim123"})
+    mid = do(client, "saveModel", {"make": "Karin", "model": "190z", "ek": "35.000", "vk": "50.000", "active": True})["id"]
+    cid = do(client, "saveCustomer", {"name": "Snake"})["id"]
+    vid = do(client, "saveVehicle", {"modelId": mid, "cond": "neu"})["id"]
+    do(client, "sell", {"vehicleId": vid, "customerId": cid})
+    oid = do(client, "saveOffer", {"customerId": cid, "modelId": mid})["id"]
+    do(client, "offerStatus", {"id": oid, "status": "bestellt", "deposit": "5.000"})
+    do(client, "purchase", {"customerId": cid, "make": "Alt", "model": "Wagen", "price": "1.000"})
+    return mid, cid, vid
+
+
+def test_admin_purge(client):
+    mid, cid, vid = _filled(client)
+    do(client, "purge", {"kind": "vehicle", "id": vid})          # verkauftes Fahrzeug samt Verkauf
+    st = client.get("/api/state").json()
+    assert st["sales"] == [] and all(v["id"] != vid for v in st["vehicles"])
+    do(client, "purge", {"kind": "customer", "id": cid})         # Kunde samt Angebot/Ankauf
+    st = client.get("/api/state").json()
+    assert st["customers"] == [] and st["offers"] == [] and st["purchases"] == []
+    assert st["orders"][0]["customerId"] is None                  # Bestellung bleibt als Lagerbestellung
+    do(client, "purge", {"kind": "model", "id": mid})            # Modell samt Bestellung
+    st = client.get("/api/state").json()
+    assert st["models"] == [] and st["orders"] == []
+    do(client, "purge", {"kind": "user", "id": st["users"][0]["id"]}, 400)   # sich selbst nicht
+
+
+def test_admin_wipe(client):
+    _filled(client)
+    do(client, "wipe", {"password": "geheim123", "confirmation": "falsch", "keepCatalog": True}, 400)
+    do(client, "wipe", {"password": "falsch", "confirmation": "LÖSCHEN", "keepCatalog": True}, 400)
+    do(client, "wipe", {"password": "geheim123", "confirmation": "löschen", "keepCatalog": True})
+    st = client.get("/api/state").json()
+    assert not any(st[k] for k in ("vehicles", "customers", "sales", "orders", "offers", "purchases"))
+    assert len(st["models"]) == 1 and len(st["users"]) == 1        # Katalog und Benutzer bleiben
+    cid = do(client, "saveCustomer", {"name": "Neu"})["id"]
+    assert client.get("/api/state").json()["customers"][0]["nr"] == "10000"   # Nummern beginnen von vorn
+    do(client, "wipe", {"password": "geheim123", "confirmation": "LÖSCHEN", "keepCatalog": False})
+    assert client.get("/api/state").json()["models"] == []
+
+
+def test_purge_and_wipe_admin_only(client):
+    login(client)
+    client.post("/api/password", json={"old": "admin", "new": "geheim123"})
+    do(client, "saveUser", {"username": "vk", "fullName": "V", "role": "sales", "password": "vk", "active": True})
+    client.post("/api/logout", json={})
+    login(client, "vk", "vk")
+    do(client, "purge", {"kind": "customer", "id": "1"}, 403)
+    do(client, "wipe", {"password": "vk", "confirmation": "LÖSCHEN"}, 403)

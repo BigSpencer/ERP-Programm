@@ -156,6 +156,8 @@ function tbl(cols, rows, emptyText) {
 }
 const searchBox = ph => `<input id="q" class="search" type="search" placeholder="${ph}" aria-label="Suchen">`;
 const btn = (action, label, cls = "") => `<button class="btn ${cls}" data-a="${action}">${label}</button>`;
+const isAdmin = () => S.me.role === "admin";
+const adminDel = () => isAdmin() ? `<button class="btn danger adminDel" data-a="purge" title="Nur für Administratoren: Eintrag ohne Rücksicht auf den Status komplett entfernen">Endgültig löschen</button>` : "";
 
 /* Cockpit */
 function cockpit() {
@@ -205,7 +207,7 @@ function bestand() {
     <select id="fStatus" aria-label="Status">${Object.entries(FILTERS).map(([k, [l]]) => `<option value="${k}" ${UI.filter.bestand === k ? "selected" : ""}>${l}</option>`).join("")}</select>
     <select id="fCond" aria-label="Zustand"><option value="">Neu & gebraucht</option><option value="neu" ${UI.filter.cond === "neu" ? "selected" : ""}>Neu</option><option value="gebraucht" ${UI.filter.cond === "gebraucht" ? "selected" : ""}>Gebraucht</option></select>
     <span class="grow"></span>${btn("vNew", "Neues Fahrzeug", "primary")}${btn("vEdit", "Bearbeiten")}${btn("vShow", "Ausstellen")}${btn("vRes", "Reservieren")}${btn("vUnres", "Reservierung aufheben")}
-    ${allowed("verkauf") ? btn("vSell", "Verkaufen") : ""}${btn("vRemove", "Ausbuchen", "danger")}</div>` +
+    ${allowed("verkauf") ? btn("vSell", "Verkaufen") : ""}${btn("vRemove", "Ausbuchen", "danger")}${adminDel()}</div>` +
     tbl([["Nr."], ["Fahrzeug"], ["Klasse", 0, 1], ["Zustand"], ["Farbe", 0, 1], ["Kennzeichen"], ["FIN", 0, 1], ["km", 1], ["EK", 1], ["VK", 1], ["Marge", 1], ["Tage", 1], ["Status"], ["Stellplatz / Reserviert für"]],
       list.map(v => ({ id: v.id, cells: [v.nr, esc(vName(v)), esc(v.cat), v.cond === "neu" ? "Neu" : "Gebraucht", esc(v.color), esc(v.plate), esc(v.vin), intf.format(v.km), num(v.ek), num(v.vk), num(v.vk - v.ek),
         AVAILABLE.includes(v.status) ? days(v.inDate) : "–", pill(v.status, STATUS[v.status]), esc(v.status === "reserviert" ? custName(v.resFor) : v.loc)] })),
@@ -218,7 +220,7 @@ function ausstellung() {
   const list = S.vehicles.filter(v => v.showSince && AVAILABLE.includes(v.status) && match([v.nr, v.make, v.model, v.loc, v.color].join(" "))).sort((a, b) => (a.loc || "~").localeCompare(b.loc || "~"));
   return head("Autohaus", "Ausstellung", "Showroom nach Stellplatz. Ein Stellplatz kann nur mit einem Fahrzeug belegt sein.") +
     `<div class="bar">${searchBox("Stellplatz, Fahrzeug …")}<span class="grow"></span>${btn("sShow", "Fahrzeug ausstellen", "primary")}${btn("sMove", "Stellplatz ändern")}${btn("sOut", "Aus Ausstellung nehmen")}
-    ${btn("vRes", "Reservieren")}${allowed("verkauf") ? btn("vSell", "Verkaufen") : ""}</div>` +
+    ${btn("vRes", "Reservieren")}${allowed("verkauf") ? btn("vSell", "Verkaufen") : ""}${adminDel()}</div>` +
     tbl([["Stellplatz"], ["Nr."], ["Fahrzeug"], ["Klasse", 0, 1], ["Farbe", 0, 1], ["VK", 1], ["Seit", 1], ["Tage", 1], ["Status"], ["Reserviert für"]],
       list.map(v => ({ id: v.id, cells: [esc(v.loc || "–"), v.nr, esc(vName(v)), esc(v.cat), esc(v.color), num(v.vk), de(v.showSince), days(v.showSince), pill(v.status, STATUS[v.status]), esc(custName(v.resFor))] })),
       "Noch kein Fahrzeug ausgestellt") + `<div class="foot">${list.length} Fahrzeug(e) in der Ausstellung</div>`;
@@ -255,7 +257,7 @@ function angebote() {
   const sum = list.filter(o => o.status === "offen").reduce((a, o) => a + o.price, 0);
   return head("Autohaus", "Angebote", "Schritt 1 von 3: Angebot an den Kunden. Zahlt oder zahlt er an, wird über den Status „Bestellt“ daraus eine Bestellung.") +
     `<div class="bar">${searchBox("Angebot, Kunde, Fahrzeug …")}<select id="fOffer" aria-label="Filter">${[["aktiv", "Offene Angebote"], ["bestellt", "Bestellt"], ["abgelehnt", "Abgelehnt"], ["abgelaufen", "Abgelaufen"], ["alle", "Alle Angebote"]].map(([k, l]) => `<option value="${k}" ${f === k ? "selected" : ""}>${l}</option>`).join("")}</select>
-    <span class="grow"></span>${btn("aNew", "Neues Angebot", "primary")}${btn("aEdit", "Bearbeiten")}${btn("aDoc", "Angebot ansehen")}${btn("aDel", "Löschen", "danger")}</div>` +
+    <span class="grow"></span>${btn("aNew", "Neues Angebot", "primary")}${btn("aEdit", "Bearbeiten")}${btn("aDoc", "Angebot ansehen")}${btn("aDel", "Löschen", "danger")}${adminDel()}</div>` +
     tbl([["Nr."], ["Datum"], ["Kunde"], ["Fahrzeug / Modell"], ["Farbe", 0, 1], ["Preis", 1], ["Gültig bis"], ["Status"], ["Bestellung", 0, 1]],
       list.map(o => { const late = o.status === "offen" && o.validUntil && o.validUntil < today(), ord = orderOfOffer(o);
         return { id: o.id, cells: [o.nr, de(o.date), esc(custName(o.customerId)), esc(offerSubject(o)), esc(o.color), num(o.price),
@@ -272,7 +274,7 @@ function bestellungen() {
   const offerNr = id => S.offers.find(x => x.orderId === id)?.nr || "";
   return head("Autohaus", "Bestellungen", "Schritt 2 von 3: Bestellung mit Anzahlung. Status „Eingetroffen“ bucht das Fahrzeug ein, „Ausgeliefert“ erstellt mit der Übergabe den Verkauf.") +
     `<div class="bar">${searchBox("Bestellung, Modell, Kunde …")}<label style="display:flex;gap:6px;align-items:center"><input id="fOpen" type="checkbox" ${UI.filter.openOnly ? "checked" : ""}> nur offene</label>
-    <span class="grow"></span>${btn("oNew", "Neue Bestellung", "primary")}${btn("oEdit", "Bearbeiten")}${btn("oDoc", "Bestellbestätigung")}${btn("oDel", "Löschen", "danger")}</div>` +
+    <span class="grow"></span>${btn("oNew", "Neue Bestellung", "primary")}${btn("oEdit", "Bearbeiten")}${btn("oDoc", "Bestellbestätigung")}${btn("oDel", "Löschen", "danger")}${adminDel()}</div>` +
     tbl([["Nr."], ["Datum"], ["Modell"], ["Farbe", 0, 1], ["Für Kunde"], ["VK", 1], ["Anzahlung", 1], ["Offen", 1], ["Liefertermin"], ["Status"], ["Fahrzeug", 0, 1], ["Angebot", 0, 1]],
       list.map(o => { const m = byId("models", o.modelId), late = o.status === "bestellt" && o.expected && o.expected < today();
         return { id: o.id, cells: [o.nr, de(o.date), esc(m ? `${m.model} – ${m.make}` : ""), esc(o.color), esc(o.customerId ? custName(o.customerId) : "– Lager –"), num(o.vk), num(o.deposit), num(o.vk - o.deposit),
@@ -290,7 +292,7 @@ function verkauf() {
   const bySeller = {}; ok.forEach(s => { const b = bySeller[s.seller] ||= [0, 0, 0]; b[0]++; b[1] += s.price; b[2] += s.price - s.ek; });
   return head("Autohaus", "Verkauf", "Schritt 3 von 3: Übergabe mit Restzahlung. Entsteht aus einer ausgelieferten Bestellung oder direkt über „Neuer Verkauf“.") +
     `<div class="bar">${searchBox("Vertrag, Käufer, Fahrzeug …")}<select id="fYear" aria-label="Jahr"><option value="">Alle Jahre</option>${years.map(x => `<option ${x === y ? "selected" : ""}>${x}</option>`).join("")}</select>
-    <span class="grow"></span>${btn("vSell", "Neuer Verkauf", "primary")}${btn("kDoc", "Kaufvertrag ansehen")}${btn("kDel", "Löschen", "danger")}</div>` +
+    <span class="grow"></span>${btn("vSell", "Neuer Verkauf", "primary")}${btn("kDoc", "Kaufvertrag ansehen")}${btn("kDel", "Löschen", "danger")}${adminDel()}</div>` +
     tbl([["Nr."], ["Datum"], ["Fahrzeug"], ["Käufer"], ["Kaufpreis", 1], ["Anzahlung", 1], ["Inzahlungn.", 1], ["Restzahlung", 1], ["EK", 1], ["Rohertrag", 1], ["Zahlung", 0, 1], ["Verkäufer", 0, 1], ["Status"], ["Bestellung", 0, 1]],
       list.map(s => ({ id: s.id, cells: [s.nr, de(s.date), esc(vLabel(byId("vehicles", s.vehicleId))), esc(custName(s.customerId)), num(s.price), s.deposit ? num(s.deposit) : "–", s.tradeValue ? num(s.tradeValue) : "–", num(s.price - s.tradeValue - s.deposit), num(s.ek),
         num(s.price - s.ek), PAY[s.pay], esc(s.seller), statusSelect("sale", s.id, s.status, SALE_STATUS, saleNext(s)), s.orderId ? byId("orders", s.orderId)?.nr || "" : ""] })), "Keine Verkäufe im gewählten Zeitraum") +
@@ -312,7 +314,7 @@ function ankauf() {
   const open = S.purchases.filter(p => p.status === "inzahlungnahme");
   return head("Autohaus", "Gebrauchtwagen-Ankauf", "Ankauf: Fahrzeug wird sofort bezahlt und steht im Bestand. Inzahlungnahme: Fahrzeug wird vorgemerkt und bei der Übergabe eines verkauften Fahrzeugs verrechnet.") +
     `<div class="bar">${searchBox("Ankauf, Verkäufer, Kennzeichen …")}<select id="fPurchase" aria-label="Status"><option value="">Alle</option>${Object.entries(PURCHASE_STATUS).map(([k, l]) => `<option value="${k}" ${f === k ? "selected" : ""}>${l}</option>`).join("")}</select>
-    <span class="grow"></span>${btn("pNew", "Neuer Ankauf", "primary")}${btn("pDoc", "Vertrag ansehen")}</div>` +
+    <span class="grow"></span>${btn("pNew", "Neuer Ankauf", "primary")}${btn("pDoc", "Vertrag ansehen")}${adminDel()}</div>` +
     tbl([["Nr."], ["Datum"], ["Fahrzeug"], ["Kennzeichen"], ["km", 1], ["Kunde"], ["Preis / Anrechnung", 1], ["Geplanter VK", 1], ["Status"], ["Fahrzeugstatus"], ["Verrechnet mit", 0, 1]],
       list.map(p => { const v = byId("vehicles", p.vehicleId), sale = p.saleId && byId("sales", p.saleId);
         return { id: p.id, cells: [p.nr, de(p.date), esc(v.nr + " " + vName(v)), esc(v.plate), intf.format(v.km), esc(custName(p.customerId)), num(p.price), num(v.vk),
@@ -325,7 +327,7 @@ function ankauf() {
 function kunden() {
   const list = S.customers.filter(c => match([c.nr, c.name, c.phone, c.email].join(" "))).sort((a, b) => a.name.localeCompare(b.name));
   return head("Stammdaten", "Kunden", "Kundenkartei mit vollständiger Fahrzeughistorie") +
-    `<div class="bar">${searchBox("Name, Telefon …")}<span class="grow"></span>${btn("cNew", "Neuer Kunde", "primary")}${btn("cEdit", "Bearbeiten")}${btn("cHist", "Fahrzeughistorie")}</div>` +
+    `<div class="bar">${searchBox("Name, Telefon …")}<span class="grow"></span>${btn("cNew", "Neuer Kunde", "primary")}${btn("cEdit", "Bearbeiten")}${btn("cHist", "Fahrzeughistorie")}${adminDel()}</div>` +
     tbl([["Nr."], ["Name"], ["Telefon"], ["E-Mail", 0, 1], ["Käufe", 1], ["Umsatz", 1], ["Notizen", 0, 1]],
       list.map(c => { const s = S.sales.filter(x => x.customerId === c.id && x.status === "ok"); return { id: c.id, cells: [c.nr, esc(c.name), esc(c.phone), esc(c.email), s.length, num(s.reduce((a, x) => a + x.price, 0)), esc(c.notes)] }; }),
       "Noch keine Kunden");
@@ -367,7 +369,7 @@ function katalog() {
       <div class="fend">${btn("cfReset", "Filter zurücksetzen")}</div></div>` : "";
   return head("Stammdaten", "Fahrzeugkatalog", "Modelle mit Standard-Einkaufs- und Verkaufspreis. Grundlage für Bestellungen und neue Fahrzeuge.") +
     `<div class="bar">${searchBox("Modell, Hersteller, Klasse …")}<button class="btn ${n ? "on" : ""}" data-a="cfToggle" aria-expanded="${UI.cfOpen}">Filter${n ? ` · ${n} aktiv` : ""} ${UI.cfOpen ? "▴" : "▾"}</button>
-    <span class="grow"></span>${btn("mNew", "Neues Modell", "primary")}${btn("mEdit", "Bearbeiten")}${btn("mImport", "CSV-Import")}</div>${panel}` +
+    <span class="grow"></span>${btn("mNew", "Neues Modell", "primary")}${btn("mEdit", "Bearbeiten")}${btn("mImport", "CSV-Import")}${adminDel()}</div>${panel}` +
     tbl([["Nr."], ["Modell"], ["Hersteller"], ["Klasse", 0, 1], ["EK", 1], ["VK", 1], ["Marge", 1], ["Marge %", 1], ["Im Bestand", 1], ["Aktiv"], ...(canOrder ? [[""]] : [])],
       list.map(m => ({ id: m.id, cells: [m.nr, esc(m.model), esc(m.make), esc(m.cat), num(m.ek), num(m.vk), num(m.vk - m.ek), m.vk ? pct(m).toFixed(1).replace(".", ",") + " %" : "–", inStock[m.id] || 0, m.active ? "ja" : "nein",
         ...(canOrder ? [m.active ? `<button class="btn sm" data-a="mOrderRow" data-id="${esc(m.id)}" title="${esc(m.make + " " + m.model)} bestellen">Bestellen</button>` : `<span class="dim">inaktiv</span>`] : [])] })),
@@ -380,14 +382,19 @@ function einstellungen() {
   return head("System", "Firmendaten", "Der Firmenname erscheint im Schriftzug und auf den Verträgen") +
     `<form class="settings" id="setForm"><div class="card form">
       <label class="full">Firmenname<input id="setCompany" value="${esc(S.settings.company)}"></label>
-      <div class="sec"><button class="btn primary" type="submit">Speichern</button></div></div></form>`;
+      <div class="sec"><button class="btn primary" type="submit">Speichern</button></div></div></form>
+    <div class="settings"><div class="card danger-zone">
+      <b>Gefahrenbereich: Datenbank bereinigen</b>
+      <p>Entfernt alle Fahrzeuge, Kunden, Angebote, Bestellungen, Verkäufe, Ankäufe und Buchungen, zum Beispiel nach einer Testphase oder zum Neustart.
+      Benutzer, Firmendaten und Kontenplan bleiben erhalten. Das lässt sich nicht rückgängig machen.</p>
+      <div style="margin-top:12px">${btn("wipe", "Datenbank bereinigen …", "danger")}</div></div></div>`;
 }
 
 /* Benutzer */
 function benutzer() {
   const list = (S.users || []).filter(u => match([u.username, u.fullName, S.roles[u.role]].join(" ")));
   return head("System", "Benutzer", "Jeder Mitarbeiter bekommt einen eigenen Zugang. Die Rolle bestimmt, welche Bereiche sichtbar sind.") +
-    `<div class="bar">${searchBox("Benutzer …")}<span class="grow"></span>${btn("uNew", "Neuer Benutzer", "primary")}${btn("uEdit", "Bearbeiten")}</div>` +
+    `<div class="bar">${searchBox("Benutzer …")}<span class="grow"></span>${btn("uNew", "Neuer Benutzer", "primary")}${btn("uEdit", "Bearbeiten")}${adminDel()}</div>` +
     tbl([["Benutzername"], ["Name"], ["Rolle"], ["Aktiv"]], list.map(u => ({ id: u.id, cells: [esc(u.username), esc(u.fullName), esc(S.roles[u.role] || u.role), u.active ? "ja" : pill("storno", "deaktiviert")] })), "Keine Benutzer") +
     `<p class="foot">Rollen: Administrator sieht alles · Vertrieb: Verkauf, Bestand, Kunden, Bestellungen · Einkauf: Katalog, Bestellungen, Ankauf · Lager: Bestand und Ausstellung · Buchhaltung: Verkäufe, Ankäufe, Kunden.</p>`;
 }
@@ -409,7 +416,7 @@ const custOpts = () => S.customers.filter(c => c.active !== false).sort((a, b) =
 /* fields = [key, label, type, extra]; type: text|money|int|date|select|check|area|sec|calc|password */
 /* modelFill: welche Formularfelder bei Auswahl eines Katalogmodells befüllt werden, z. B. { make: "make", ek: "ek" }
    (Formularfeld -> Feld des Katalogmodells). fillNow: auch beim Öffnen sofort befüllen (neue Datensätze). */
-function form({ title, sub, fields, values = {}, submit = "Speichern", onSubmit, wide, onInput, noCancel, modelFill, fillNow }) {
+function form({ title, sub, fields, values = {}, submit = "Speichern", onSubmit, wide, onInput, noCancel, modelFill, fillNow, danger }) {
   const f = fields.map(([k, label, type, extra = {}]) => {
     const v = values[k] ?? "", id = "f_" + k, cls = extra.full ? "full" : "";
     if (type === "sec") return `<div class="sec eyebrow">${label}</div>`;
@@ -424,7 +431,7 @@ function form({ title, sub, fields, values = {}, submit = "Speichern", onSubmit,
     return `<label class="${cls}">${label}<input id="${id}" type="${t}"${im}${ac} value="${esc(val)}" placeholder="${esc(extra.hint || "")}"></label>`;
   }).join("");
   modal(`<h2>${title}</h2>${sub ? `<p class="sub">${sub}</p>` : ""}<form id="mf" novalidate><div class="form">${f}</div><p class="err" id="err" role="alert"></p>
-    <div class="actions">${noCancel ? "" : `<button type="button" class="btn" data-a="close">Abbrechen</button>`}<button type="submit" class="btn primary">${submit}</button></div></form>`, wide);
+    <div class="actions">${noCancel ? "" : `<button type="button" class="btn" data-a="close">Abbrechen</button>`}<button type="submit" class="btn ${danger ? "dangerBtn" : "primary"}">${submit}</button></div></form>`, wide);
   const read = () => Object.fromEntries(fields.filter(x => !["sec", "calc"].includes(x[2])).map(([k, , type]) => { const el = $("#f_" + k); return [k, type === "check" ? el.checked : el.value]; }));
   $("#mf").addEventListener("submit", async e => {
     e.preventDefault();
@@ -451,8 +458,8 @@ function form({ title, sub, fields, values = {}, submit = "Speichern", onSubmit,
   }
   if (onInput) { const run = () => { try { onInput(read()); } catch (e) { /* Vorschau ignoriert ungültige Eingaben */ } }; $("#mf").addEventListener("input", run); run(); }
 }
-function ask(title, text, okLabel, fn) {
-  modal(`<h2>${title}</h2><p class="sub">${text}</p><p class="err" id="err" role="alert"></p><div class="actions"><button class="btn" data-a="close">Abbrechen</button><button class="btn primary" id="okb">${okLabel}</button></div>`);
+function ask(title, text, okLabel, fn, danger) {
+  modal(`<h2>${title}</h2><p class="sub">${text}</p><p class="err" id="err" role="alert"></p><div class="actions"><button class="btn" data-a="close">Abbrechen</button><button class="btn ${danger ? "dangerBtn" : "primary"}" id="okb">${okLabel}</button></div>`);
   $("#okb").onclick = async () => { $("#okb").disabled = true; try { const m = await fn(); close(); render(); if (m) toast(m); } catch (e) { $("#err").textContent = e.message; $("#okb").disabled = false; } };
 }
 function info(title, html, wide) { modal(`<h2>${title}</h2>${html}<div class="actions"><button class="btn primary" data-a="close">Schließen</button></div>`, wide); }
@@ -571,6 +578,51 @@ function deliverDialog(o) {
       const r = await api("orderStatus", { id: o.id, status: "ausgeliefert", price: d.price, date: d.date, pay: d.pay, notes: d.notes, tradePurchaseId: d.tradePurchaseId });
       UI.sel.verkauf = r.id; location.hash = "verkauf"; return r.message;
     } });
+}
+/* Administratoren: Eintrag endgültig löschen (ohne Statusprüfung, ohne Rückbuchung) */
+const PURGE_KIND = { bestand: ["vehicle", "vehicles", "ein Fahrzeug"], ausstellung: ["vehicle", "vehicles", "ein Fahrzeug"], angebote: ["offer", "offers", "ein Angebot"],
+  bestellungen: ["order", "orders", "eine Bestellung"], verkauf: ["sale", "sales", "einen Verkauf"], ankauf: ["purchase", "purchases", "einen Ankauf"],
+  kunden: ["customer", "customers", "einen Kunden"], katalog: ["model", "models", "ein Modell"], benutzer: ["user", "users", "einen Benutzer"] };
+function purgeEffects(kind, x) {
+  const n = (list, f) => S[list].filter(f).length, out = [];
+  const add = (cnt, one, many, what) => cnt && out.push(`${cnt} ${cnt === 1 ? one : many} ${what}`);
+  if (kind === "vehicle") {
+    add(n("sales", s => s.vehicleId === x.id), "Verkauf", "Verkäufe", "dieses Fahrzeugs werden mitgelöscht");
+    add(n("purchases", p => p.vehicleId === x.id), "Ankauf", "Ankäufe", "dieses Fahrzeugs werden mitgelöscht");
+    add(n("orders", o => o.vehicleId === x.id) + n("offers", o => o.vehicleId === x.id), "Bestellung/Angebot", "Bestellungen/Angebote", "verlieren den Fahrzeugbezug");
+  } else if (kind === "customer") {
+    add(n("sales", s => s.customerId === x.id), "Verkauf", "Verkäufe", "werden mitgelöscht");
+    add(n("purchases", p => p.customerId === x.id), "Ankauf", "Ankäufe", "werden mitgelöscht");
+    add(n("offers", o => o.customerId === x.id), "Angebot", "Angebote", "werden mitgelöscht");
+    add(n("orders", o => o.customerId === x.id), "Bestellung", "Bestellungen", "werden zu Lagerbestellungen");
+    add(n("vehicles", v => v.resFor === x.id), "Reservierung", "Reservierungen", "werden aufgehoben");
+  } else if (kind === "model") {
+    add(n("orders", o => o.modelId === x.id), "Bestellung", "Bestellungen", "dieses Modells werden mitgelöscht");
+    add(n("vehicles", v => v.modelId === x.id), "Fahrzeug", "Fahrzeuge", "bleiben erhalten, verlieren aber den Katalogbezug");
+  }
+  return out;
+}
+function adminPurge() {
+  const [kind, list, what] = PURGE_KIND[UI.view] || [];
+  if (!kind) return;
+  const x = selected(list, what); if (!x) return;
+  const label = x.nr || x.username || "";
+  const name = kind === "customer" ? ` (${esc(x.name)})` : kind === "vehicle" ? ` (${esc(vName(x))})` : kind === "model" ? ` (${esc(x.model)} – ${esc(x.make)})` : "";
+  const fx = purgeEffects(kind, x);
+  ask("Endgültig löschen", `<b>${esc(label)}${name}</b> wird vollständig aus der Datenbank entfernt, unabhängig vom Status. Es wird nichts zurückgebucht und kein Status angepasst.` +
+    (fx.length ? `<br><br>Außerdem:<br>• ${fx.join("<br>• ")}` : "") + `<br><br><b>Das kann nicht rückgängig gemacht werden.</b>`, "Endgültig löschen",
+    async () => { const r = await api("purge", { kind, id: x.id }); delete UI.sel[UI.view]; return r.message; }, true);
+}
+function wipeDialog() {
+  const c = { v: S.vehicles.length, k: S.customers.length, s: S.sales.length, o: S.orders.length, a: S.offers.length, p: S.purchases.length };
+  form({ title: "Datenbank bereinigen",
+    sub: `Folgendes wird <b>endgültig gelöscht</b>: ${c.v} Fahrzeuge, ${c.k} Kunden, ${c.a} Angebote, ${c.o} Bestellungen, ${c.s} Verkäufe, ${c.p} Ankäufe sowie alle Buchungen und das Änderungsprotokoll. ` +
+      `Benutzer, Firmendaten und Kontenplan bleiben erhalten. Die Belegnummern beginnen wieder von vorn.<br><br><b>Das kann nicht rückgängig gemacht werden.</b>`,
+    fields: [["keepCatalog", `Fahrzeugkatalog behalten (${S.models.length} Modelle)`, "check"],
+      ["confirmation", "Zur Bestätigung LÖSCHEN eintippen", "text", { hint: "LÖSCHEN", full: true }],
+      ["password", "Dein Passwort", "password", { ac: "current-password", full: true }]],
+    values: { keepCatalog: true }, submit: "Endgültig bereinigen", danger: true,
+    onSubmit: async d => { const r = await api("wipe", d); UI.sel = {}; return r.message; } });
 }
 async function changeStatus(kind, id, to) {
   render();                                   // Auswahl zurücksetzen, bis der Wechsel bestätigt ist
@@ -749,6 +801,8 @@ const ACTIONS = {
   aDel: () => { const o = selected("offers", "ein Angebot"); o && ask("Angebot löschen", `Angebot ${o.nr} für ${esc(custName(o.customerId))} endgültig löschen?` + (o.orderId ? " Die daraus entstandene Bestellung bleibt erhalten." : ""), "Löschen", async () => done(await api("deleteOffer", { id: o.id }))); },
   oDel: () => { const o = selected("orders", "eine Bestellung"); o && ask("Bestellung löschen", `Bestellung ${o.nr} endgültig löschen?` + (o.status === "eingetroffen" ? " Ein bestelltes Fahrzeug wird wieder aus dem Bestand genommen, ein Bestandsfahrzeug wird freigegeben." : "") + (S.offers.some(x => x.orderId === o.id) ? " Das zugehörige Angebot wird wieder auf „Offen“ gesetzt." : ""), "Löschen", async () => done(await api("deleteOrder", { id: o.id }))); },
   kDel: () => { const s = selected("sales", "einen Verkauf"); s && ask("Verkauf löschen", `Verkauf ${s.nr} endgültig löschen?` + (s.status === "ok" ? " Der Verkauf wird dabei storniert: Buchung wird zurückgenommen, das Fahrzeug geht zurück in den Bestand." : ""), "Löschen", async () => done(await api("deleteSale", { id: s.id }))); },
+  purge: () => adminPurge(),
+  wipe: () => wipeDialog(),
   uNew: () => userDialog(null),
   uEdit: () => { const u = selected("users", "einen Benutzer"); u && userDialog(u); },
 };

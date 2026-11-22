@@ -220,3 +220,10 @@ td:has(> select.rowStatus) { padding-block: 5px; }
 select.rowStatus.st-inzahlungnahme { color: var(--warn); border-color: #6b5221; }
 select.rowStatus.st-angekauft, select.rowStatus.st-verrechnet { color: var(--pos); border-color: #2b5a42; }
 .pill.inzahlung { color: var(--warn); border-color: #6b5221; }
+
+/* Administratoren: endgültig löschen / Datenbank bereinigen */
+.btn.adminDel { border-style: dashed; }
+.btn.dangerBtn { background: var(--neg); border-color: var(--neg); color: #fff; }
+.btn.dangerBtn:hover { background: #f07d76; border-color: #f07d76; color: #fff; }
+.card.danger-zone { border-color: #6b2f2b; border-top: 2px solid var(--neg); }
+.card.danger-zone b { color: var(--neg); }

@@ -39,7 +39,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.middleware.sessions import SessionMiddleware
 
 from .. import __version__, db, models as m
-from ..services import BusinessError, auth, context, dealer, get_setting, masterdata, set_setting, set_user
+from ..services import BusinessError, auth, context, dealer, maintenance, get_setting, masterdata, set_setting, set_user
 
 log = logging.getLogger("erp.web")
 STATIC = Path(__file__).parent / "static"
@@ -402,6 +402,19 @@ def a_settings(s, b):
     return {"message": "Firmendaten gespeichert"}
 
 
+def a_purge(s, b):
+    label = maintenance.purge(s, _str(b.get("kind")), _id(b.get("id")))
+    return {"message": f"{label} endgültig gelöscht"}
+
+
+def a_wipe(s, b):
+    counts = maintenance.wipe_database(s, b.get("password") or "", _str(b.get("confirmation")),
+                                       keep_catalog=bool(b.get("keepCatalog", True)))
+    n = counts.get("vehicles", 0) + counts.get("customers", 0) + counts.get("vehicle_sales", 0)
+    return {"message": f"Datenbank bereinigt ({counts.get('vehicles', 0)} Fahrzeuge, {counts.get('customers', 0)} Kunden, "
+                       f"{counts.get('vehicle_sales', 0)} Verkäufe entfernt)" if n else "Datenbank bereinigt"}
+
+
 def a_save_user(s, b):
     uid = _id(b.get("id"))
     password = b.get("password") or None
@@ -437,6 +450,8 @@ ACTIONS: dict[str, tuple[str, Callable[[Any, dict], dict]]] = {
     "importModels": ("vehicle_models", a_import_models),
     "settings": ("admin", a_settings),
     "saveUser": ("admin", a_save_user),
+    "purge": ("admin", a_purge),
+    "wipe": ("admin", a_wipe),
 }
 # Der Verkauf braucht auch Fahrzeuge, die Kundenpflege ist in Verkauf/Ankauf nötig
 EXTRA_MODULES = {"reserve": ("vehicle_sales", "showroom"), "showroom": ("showroom",), "showroomOut": ("showroom",),
