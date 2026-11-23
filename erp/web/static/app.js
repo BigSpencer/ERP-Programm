@@ -84,27 +84,47 @@ function history(cid) {
   return out.sort((a, b) => b[0].localeCompare(a[0]));
 }
 
+/* ---------- Zeiträume: kleinste Einheit ist die Kalenderwoche (Montag bis Sonntag) ---------- */
+const addDaysIso = (isoDate, n) => { const d = new Date(isoDate + "T12:00:00"); d.setDate(d.getDate() + n); return iso(d); };
+function weekStart(isoDate = today()) { const d = new Date(isoDate + "T12:00:00"); return addDaysIso(isoDate, -((d.getDay() + 6) % 7)); }
+function isoWeek(isoDate) {                 // Kalenderwoche nach ISO 8601
+  const d = new Date(isoDate + "T12:00:00"); d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7);
+  const w1 = new Date(d.getFullYear(), 0, 4);
+  return 1 + Math.round(((d - w1) / 864e5 - 3 + (w1.getDay() + 6) % 7) / 7);
+}
+const PERIODS = [["woche", "Diese Woche"], ["vorwoche", "Letzte Woche"], ["monat", "Dieser Monat"], ["jahr", "Dieses Jahr"], ["alle", "Gesamt"]];
+function periodRange(key) {
+  const t0 = today(), ws = weekStart(t0);
+  if (key === "woche") return [ws, addDaysIso(ws, 6)];
+  if (key === "vorwoche") return [addDaysIso(ws, -7), addDaysIso(ws, -1)];
+  if (key === "monat") return [t0.slice(0, 8) + "01", t0.slice(0, 8) + "31"];
+  if (key === "jahr") return [t0.slice(0, 5) + "01-01", t0.slice(0, 5) + "12-31"];
+  return ["0000-01-01", "9999-12-31"];
+}
+const periodLabel = key => (PERIODS.find(p => p[0] === key) || PERIODS[0])[1];
+const periodHint = key => { const [a, b] = periodRange(key); return key === "alle" ? "" : key.includes("woche") ? `KW ${isoWeek(a)} · ${de(a)} – ${de(b)}` : ""; };
+/* Umsatz je Kalenderwoche der letzten n Wochen (für Diagramme) */
+function weekly(filter = () => true, n = 12) {
+  const ws = weekStart(), out = [];
+  for (let i = n - 1; i >= 0; i--) {
+    const a = addDaysIso(ws, -7 * i), b = addDaysIso(a, 6);
+    out.push(["KW " + isoWeek(a), S.sales.filter(s => s.status === "ok" && s.date >= a && s.date <= b && filter(s)).reduce((x, s) => x + s.price, 0)]);
+  }
+  return out;
+}
+
 function kpis() {
-  const t = today(), ms = t.slice(0, 8) + "01", ys = t.slice(0, 5) + "01-01";
+  const t = today(), [ws, we] = periodRange("woche"), [ms] = periodRange("monat");
   const stock = S.vehicles.filter(v => AVAILABLE.includes(v.status));
   const done = S.sales.filter(s => s.status === "ok");
   const sum = (l, f) => l.reduce((a, x) => a + f(x), 0);
-  const month = done.filter(s => s.date >= ms), year = done.filter(s => s.date >= ys);
+  const week = done.filter(s => s.date >= ws && s.date <= we), month = done.filter(s => s.date >= ms && s.date <= t);
   const open = S.orders.filter(o => o.status === "bestellt");
   return { stock: stock.length, used: stock.filter(v => v.cond === "gebraucht").length, reserved: stock.filter(v => v.status === "reserviert").length,
     stockEk: sum(stock, v => v.ek), stockVk: sum(stock, v => v.vk), showroom: stock.filter(v => v.showSince).length,
     open: open.length, late: open.filter(o => o.expected && o.expected < t).length, deposits: sum(open, o => o.deposit),
-    mCount: month.length, mSum: sum(month, s => s.price), mMargin: sum(month, s => s.price - s.ek),
-    yCount: year.length, ySum: sum(year, s => s.price), yMargin: sum(year, s => s.price - s.ek), models: S.models.filter(m => m.active).length };
-}
-function monthly() {
-  const out = [], d = new Date(); d.setDate(1);
-  for (let i = 11; i >= 0; i--) {
-    const x = new Date(d.getFullYear(), d.getMonth() - i, 1), key = x.getFullYear() + "-" + String(x.getMonth() + 1).padStart(2, "0");
-    out.push([String(x.getMonth() + 1).padStart(2, "0") + "/" + String(x.getFullYear()).slice(2),
-      S.sales.filter(s => s.status === "ok" && s.date.startsWith(key)).reduce((a, s) => a + s.price, 0)]);
-  }
-  return out;
+    wCount: week.length, wSum: sum(week, s => s.price), wMargin: sum(week, s => s.price - s.ek),
+    mCount: month.length, mSum: sum(month, s => s.price), mMargin: sum(month, s => s.price - s.ek), models: S.models.filter(m => m.active).length };
 }
 
 /* ------------------------------------------------------------------ Ansicht */
@@ -112,7 +132,7 @@ const VIEWS = [
   ["cockpit", "Cockpit", "Autohaus"], ["bestand", "Fahrzeugbestand", "Autohaus"], ["ausstellung", "Ausstellung", "Autohaus"],
   ["angebote", "Angebote", "Autohaus"], ["bestellungen", "Bestellungen", "Autohaus"], ["verkauf", "Verkauf", "Autohaus"], ["ankauf", "Gebrauchtwagen-Ankauf", "Autohaus"],
   ["kunden", "Kunden", "Stammdaten"], ["katalog", "Fahrzeugkatalog", "Stammdaten"], ["mitarbeiter", "Mitarbeiter", "Team"], ["benutzer", "Admins & Rollen", "System"], ["einstellungen", "Firmendaten", "System"]];
-const UI = { view: "cockpit", sel: {}, q: {}, sort: {}, filter: { bestand: "verfuegbar", cond: "", openOnly: true, year: String(new Date().getFullYear()) } };
+const UI = { view: "cockpit", sel: {}, q: {}, sort: {}, filter: { bestand: "verfuegbar", cond: "", openOnly: true } };
 const allowed = v => S.me.views.includes(v);
 
 function counts() {
@@ -224,9 +244,9 @@ function cockpit() {
   return head("Übersicht", esc(S.settings.company), "Bestand, Ausstellung, Bestellungen und Verkäufe auf einen Blick") +
     `<div class="tiles">${tile("Fahrzeuge im Bestand", k.stock, `davon ${k.used} gebraucht · ${k.reserved} reserviert`)}${tile("Bestandswert (EK)", money(k.stockEk), "Listenwert " + money(k.stockVk))}
     ${tile("In der Ausstellung", k.showroom, k.models + " Modelle im Katalog")}${tile("Offene Bestellungen", k.open, `<span class="${k.late ? "late" : ""}">${k.late} überfällig</span> · Anzahlungen ${money(k.deposits)}`)}
-    ${tile("Verkäufe lfd. Monat", money(k.mSum), k.mCount + " Fahrzeug(e)")}${tile("Rohertrag lfd. Monat", money(k.mMargin), pct(k.mMargin, k.mSum))}
-    ${tile("Verkäufe lfd. Jahr", money(k.ySum), k.yCount + " Fahrzeug(e)")}${tile("Rohertrag lfd. Jahr", money(k.yMargin), pct(k.yMargin, k.ySum))}</div>
-    <div class="chart"><h3 class="eyebrow">Fahrzeugverkäufe je Monat</h3>${chart(monthly())}</div>
+    ${tile(`Verkäufe diese Woche (KW ${isoWeek(today())})`, money(k.wSum), k.wCount + " Fahrzeug(e)")}${tile("Rohertrag diese Woche", money(k.wMargin), pct(k.wMargin, k.wSum))}
+    ${tile("Verkäufe dieser Monat", money(k.mSum), k.mCount + " Fahrzeug(e)")}${tile("Rohertrag dieser Monat", money(k.mMargin), pct(k.mMargin, k.mSum))}</div>
+    <div class="chart"><h3 class="eyebrow">Fahrzeugverkäufe je Woche (letzte 12 Kalenderwochen)</h3>${chart(weekly())}</div>
     <div class="two"><div><h3 class="eyebrow">Längste Standzeit</h3>${tbl([["Fahrzeug"], ["Status"], ["Tage", 1], ["VK", 1]],
       aging.map(v => ({ id: v.id, cells: [esc(vLabel(v)), pill(v.status, STATUS[v.status]), days(v.inDate), num(v.vk)] })), "Kein Fahrzeug im Bestand")}</div>
     <div><h3 class="eyebrow">Erwartete Fahrzeuge</h3>${tbl([["Bestellung"], ["Modell"], ["Für"], ["Liefertermin", 1]],
@@ -342,13 +362,12 @@ function bestellungen() {
 
 /* Verkauf */
 function verkauf() {
-  const y = UI.filter.year;
-  const list = S.sales.filter(s => (!y || s.date.startsWith(y)) && match([s.nr, custName(s.customerId), vLabel(byId("vehicles", s.vehicleId)), s.seller].join(" "))).sort((a, b) => b.nr.localeCompare(a.nr));
+  const per = UI.filter.salesPeriod || "woche", [pf, pt] = periodRange(per);
+  const list = S.sales.filter(s => s.date >= pf && s.date <= pt && match([s.nr, custName(s.customerId), vLabel(byId("vehicles", s.vehicleId)), s.seller].join(" "))).sort((a, b) => b.nr.localeCompare(a.nr));
   const ok = list.filter(s => s.status === "ok"), tot = ok.reduce((a, s) => a + s.price, 0), mg = ok.reduce((a, s) => a + s.price - s.ek, 0);
-  const years = [...new Set(S.sales.map(s => s.date.slice(0, 4)).concat(String(new Date().getFullYear())))].sort().reverse();
   const bySeller = {}; ok.forEach(s => { const b = bySeller[s.seller] ||= [0, 0, 0]; b[0]++; b[1] += s.price; b[2] += s.price - s.ek; });
   return head("Autohaus", "Verkauf", "Schritt 3 von 3: Übergabe mit Restzahlung. Entsteht aus einer ausgelieferten Bestellung oder direkt über „Neuer Verkauf“.") +
-    `<div class="bar">${searchBox("Vertrag, Käufer, Fahrzeug …")}<select id="fYear" aria-label="Jahr"><option value="">Alle Jahre</option>${years.map(x => `<option ${x === y ? "selected" : ""}>${x}</option>`).join("")}</select>
+    `<div class="bar">${searchBox("Vertrag, Käufer, Fahrzeug …")}<select id="fSalesPeriod" aria-label="Zeitraum">${PERIODS.map(([k, l]) => `<option value="${k}" ${k === per ? "selected" : ""}>${l}</option>`).join("")}</select><span class="periodHint">${periodHint(per)}</span>
     <span class="grow"></span>${btn("vSell", "Neuer Verkauf", "primary")}</div>` +
     tbl([["Nr."], ["Datum"], ["Fahrzeug"], ["Käufer"], ["Kaufpreis", 1], ["Anzahlung", 1], ["Inzahlungn.", 1], ["Restzahlung", 1], ["EK", 1], ["Rohertrag", 1], ["Zahlung", 0, 1], ["Verkäufer", 0, 1], ["Status"], ["Bestellung", 0, 1]],
       list.map(s => ({ id: s.id, cells: [s.nr, de(s.date), esc(vLabel(byId("vehicles", s.vehicleId))), esc(custName(s.customerId)), num(s.price), s.deposit ? num(s.deposit) : "–", s.tradeValue ? num(s.tradeValue) : "–", num(s.price - s.tradeValue - s.deposit), num(s.ek),
@@ -557,14 +576,6 @@ function benutzer() {
 }
 
 /* ---------------------------------------------------------------- Mitarbeiter & Statistiken */
-const PERIODS = [["monat", "Laufender Monat"], ["jahr", "Laufendes Jahr"], ["vorjahr", "Vorjahr"], ["alle", "Gesamt"]];
-function periodRange(key) {
-  const y = new Date().getFullYear(), t0 = today();
-  if (key === "monat") return [t0.slice(0, 8) + "01", t0];
-  if (key === "jahr") return [y + "-01-01", t0];
-  if (key === "vorjahr") return [(y - 1) + "-01-01", (y - 1) + "-12-31"];
-  return ["0000-01-01", "9999-12-31"];
-}
 function employeeStats(username, from, to) {
   const inP = d => d && d >= from && d <= to;
   const sales = S.sales.filter(s => s.status === "ok" && s.seller === username && inP(s.date));
@@ -579,10 +590,11 @@ function employeeStats(username, from, to) {
 }
 const pctTxt = v => v === null ? "–" : v.toFixed(1).replace(".", ",") + " %";
 function mitarbeiter() {
-  const per = UI.filter.period || "jahr", [from, to] = periodRange(per);
-  const users = (S.users || []).filter(u => match([u.username, u.fullName, ...u.roles.map(roleName)].join(" ")));
+  const per = UI.filter.period || "woche", [from, to] = periodRange(per);
+  const staff = (S.users || []).filter(u => !u.admin);                    // Administratoren gehören nicht zu den Mitarbeitern
+  const users = staff.filter(u => match([u.username, u.fullName, ...u.roles.map(roleName)].join(" ")));
   const rows = users.map(u => ({ u, st: employeeStats(u.username, from, to) }));
-  const team = (S.users || []).map(u => employeeStats(u.username, from, to));
+  const team = staff.map(u => employeeStats(u.username, from, to));
   const sum = k => team.reduce((a, x) => a + x[k], 0);
   const tRev = sum("revenue"), tMar = sum("margin"), tOff = sum("offers"), tWon = sum("won");
   const best = rows.filter(r => r.st.revenue > 0).sort((a, b) => b.st.revenue - a.st.revenue)[0];
@@ -591,33 +603,24 @@ function mitarbeiter() {
   return head("Team", "Mitarbeiter", "Mitarbeiter mit ihren Rollen verwalten und Leistungen auswerten. Klick auf „Statistik“ zeigt die Details eines Mitarbeiters.") +
     `<div class="tiles">${tile("Verkäufe im Zeitraum", sum("sales"), "Umsatz " + money(tRev))}${tile("Rohertrag", money(tMar), "Marge " + pctTxt(tRev ? tMar / tRev * 100 : null))}
       ${tile("Angebote", tOff, `${tWon} bestellt · Quote ${pctTxt(tOff ? tWon / tOff * 100 : null)}`)}${tile("Top-Verkäufer", best ? esc(best.u.fullName || best.u.username) : "–", best ? money(best.st.revenue) : "")}</div>` +
-    `<div class="bar">${searchBox("Name, Rolle …")}<select id="fPeriod" aria-label="Zeitraum">${PERIODS.map(([k, l]) => `<option value="${k}" ${k === per ? "selected" : ""}>${l}</option>`).join("")}</select>
+    `<div class="bar">${searchBox("Name, Rolle …")}<select id="fPeriod" aria-label="Zeitraum">${PERIODS.map(([k, l]) => `<option value="${k}" ${k === per ? "selected" : ""}>${l}</option>`).join("")}</select><span class="periodHint">${periodHint(per)}</span>
       <span class="grow"></span>${btn("eNew", "Neuer Mitarbeiter", "primary")}</div>` +
     tbl([["Name"], ["Benutzer", 0, 1], ["Rollen"], ["Verkäufe", 1], ["Umsatz", 1], ["Rohertrag", 1], ["Ø Marge", 1], ["Angebote", 1], ["Quote", 1], ["Bestellungen", 1], ["Ankäufe", 1], ["Letzter Verkauf"], ["Aktiv"]],
-      rows.map(({ u, st }) => ({ id: u.id, cells: [esc(u.fullName || u.username), esc(u.username), u.admin ? pill("ausstellung", "Administrator") : u.roles.map(k => esc(roleName(k))).join(", "),
+      rows.map(({ u, st }) => ({ id: u.id, cells: [esc(u.fullName || u.username), esc(u.username), u.roles.map(k => esc(roleName(k))).join(", "),
         st.sales, num(st.revenue), num(st.margin), pctTxt(st.marginPct), st.offers, pctTxt(st.quote), st.orders, st.purchases, de(st.last) || "–", u.active ? "ja" : "nein"] })),
       "Noch keine Mitarbeiter. Lege mit „Neuer Mitarbeiter“ den ersten an.",
-      id => { const u = byId("users", id); return rb("eStats", "Statistik", "gold") + (u.admin ? "" : rb("eEdit", "Bearbeiten")) + (isAdm && !u.admin ? rbAdmin() : ""); }) +
-    `<div class="foot">${rows.length} Mitarbeiter · Zeitraum: ${PERIODS.find(p => p[0] === per)[1]}</div>`;
-}
-function monthlyFor(username) {
-  const out = [], d = new Date(); d.setDate(1);
-  for (let i = 11; i >= 0; i--) {
-    const x = new Date(d.getFullYear(), d.getMonth() - i, 1), key = x.getFullYear() + "-" + String(x.getMonth() + 1).padStart(2, "0");
-    out.push([String(x.getMonth() + 1).padStart(2, "0") + "/" + String(x.getFullYear()).slice(2),
-      S.sales.filter(s => s.status === "ok" && s.seller === username && s.date.startsWith(key)).reduce((a, s) => a + s.price, 0)]);
-  }
-  return out;
+      id => rb("eStats", "Statistik", "gold") + rb("eEdit", "Bearbeiten") + (isAdm ? rbAdmin() : "")) +
+    `<div class="foot">${rows.length} Mitarbeiter · Zeitraum: ${periodLabel(per)}${periodHint(per) ? " · " + periodHint(per) : ""}</div>`;
 }
 function statsDialog(u) {
-  const per = UI.filter.period || "jahr", [from, to] = periodRange(per), st = employeeStats(u.username, from, to);
+  const per = UI.filter.period || "woche", [from, to] = periodRange(per), st = employeeStats(u.username, from, to);
   const tile = (t, v, s) => `<div class="tile"><small>${t}</small><strong>${v}</strong><span>${s || "&nbsp;"}</span></div>`;
   const recent = S.sales.filter(s => s.status === "ok" && s.seller === u.username).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 8);
   info(`${esc(u.fullName || u.username)} · Statistik`,
-    `<p class="sub">${u.admin ? "Administrator" : u.roles.map(k => esc(roleName(k))).join(", ")} · Zeitraum: ${PERIODS.find(p => p[0] === per)[1]}</p>
+    `<p class="sub">${u.admin ? "Administrator" : u.roles.map(k => esc(roleName(k))).join(", ")} · Zeitraum: ${periodLabel(per)}${periodHint(per) ? " · " + periodHint(per) : ""}</p>
     <div class="tiles statTiles">${tile("Verkäufe", st.sales, "Ø " + money(st.avg))}${tile("Umsatz", money(st.revenue))}${tile("Rohertrag", money(st.margin), "Marge " + pctTxt(st.marginPct))}
       ${tile("Angebote", st.offers, `${st.won} bestellt · Quote ${pctTxt(st.quote)}`)}${tile("Bestellungen angelegt", st.orders)}${tile("Ankäufe", st.purchases)}</div>
-    <div class="chart"><h3 class="eyebrow">Verkäufe je Monat (letzte 12 Monate)</h3>${chart(monthlyFor(u.username))}</div>
+    <div class="chart"><h3 class="eyebrow">Verkäufe je Woche (letzte 12 Kalenderwochen)</h3>${chart(weekly(s => s.seller === u.username))}</div>
     <h3 class="eyebrow" style="margin:14px 0 8px">Letzte Verkäufe</h3>
     <div class="tablewrap"><table><thead><tr><th>Datum</th><th>Vertrag</th><th>Fahrzeug</th><th>Käufer</th><th class="n">Preis</th><th class="n">Rohertrag</th></tr></thead><tbody>
     ${recent.length ? recent.map(s => `<tr><td>${de(s.date)}</td><td>${s.nr}</td><td>${esc(vLabel(byId("vehicles", s.vehicleId)))}</td><td>${esc(custName(s.customerId))}</td><td class="n">${num(s.price)}</td><td class="n">${num(s.price - s.ek)}</td></tr>`).join("")
@@ -1164,7 +1167,7 @@ document.addEventListener("change", e => {
   if (t.id === "fStatus") { UI.filter.bestand = t.value; render(); }
   if (t.id === "fCond") { UI.filter.cond = t.value; render(); }
   if (t.id === "fOpen") { UI.filter.openOnly = t.checked; render(); }
-  if (t.id === "fYear") { UI.filter.year = t.value; render(); }
+  if (t.id === "fSalesPeriod") { UI.filter.salesPeriod = t.value; render(); }
   if (t.id === "fPeriod") { UI.filter.period = t.value; render(); }
   if (t.id === "fOffer") { UI.filter.offer = t.value; render(); }
   if (t.id === "fPurchase") { UI.filter.purchase = t.value; render(); }
