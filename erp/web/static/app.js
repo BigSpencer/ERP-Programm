@@ -112,7 +112,7 @@ const VIEWS = [
   ["cockpit", "Cockpit", "Autohaus"], ["bestand", "Fahrzeugbestand", "Autohaus"], ["ausstellung", "Ausstellung", "Autohaus"],
   ["angebote", "Angebote", "Autohaus"], ["bestellungen", "Bestellungen", "Autohaus"], ["verkauf", "Verkauf", "Autohaus"], ["ankauf", "Gebrauchtwagen-Ankauf", "Autohaus"],
   ["kunden", "Kunden", "Stammdaten"], ["katalog", "Fahrzeugkatalog", "Stammdaten"], ["einstellungen", "Firmendaten", "System"], ["benutzer", "Benutzer", "System"]];
-const UI = { view: "cockpit", sel: {}, q: {}, filter: { bestand: "verfuegbar", cond: "", openOnly: true, year: String(new Date().getFullYear()) } };
+const UI = { view: "cockpit", sel: {}, q: {}, sort: {}, filter: { bestand: "verfuegbar", cond: "", openOnly: true, year: String(new Date().getFullYear()) } };
 const allowed = v => S.me.views.includes(v);
 
 function counts() {
@@ -147,6 +147,7 @@ function render() {
   renderNav();
   const mob = `<div class="mobileWho">${esc(S.me.fullName || S.me.username)} · <button data-a="pw">Passwort</button><button data-a="logout">Abmelden</button></div>`;
   const views = { cockpit, bestand, ausstellung, angebote, bestellungen, verkauf, ankauf, kunden, katalog, einstellungen, benutzer };
+  tblCounter = 0;
   $("#main").innerHTML = mob + views[UI.view]();
   const q = $("#q"); if (q) q.value = UI.q[UI.view] || "";
   fitList();
@@ -163,12 +164,48 @@ function head(eyebrow, title, sub) { return `<div class="head"><div><div class="
 function pill(key, label) { return `<span class="pill ${key}">${esc(label)}</span>`; }
 function match(text) { const q = (UI.q[UI.view] || "").toLowerCase(); return !q || text.toLowerCase().includes(q); }
 /* acts: optionale Funktion id -> Knöpfe für die Aktionsspalte am Zeilenende; main: Hauptliste der Ansicht (feste Kopfzeile, eigener Bildlauf) */
+/* Sortierwert einer Zelle aus ihrem Inhalt: Datum, Betrag, Zahl, Prozent oder Text */
+function sortKey(html, numeric) {
+  let s = String(html ?? "");
+  const opt = s.match(/<option[^>]*selected[^>]*>([^<]*)</);          // Status-Auswahl: gewählter Wert
+  if (opt) s = opt[1];
+  s = s.replace(/<[^>]*>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").trim();
+  if (s === "" || s === "–" || s === "-") return null;                // leer: immer ans Ende
+  let d = s.match(/^(\d{2})\.(\d{2})\.(\d{4})/);                    // Datum TT.MM.JJJJ
+  if (d) return +(d[3] + d[2] + d[1]);
+  if (numeric || /^-?\$?[\d.,]+\s?%?$/.test(s)) {
+    let x = s.replace(/[$%\s]/g, "");
+    if (/^-?\d{1,3}(\.\d{3})+$/.test(x)) x = x.replace(/\./g, "");                 // 85.000 (km, deutsch)
+    else if (/^-?\d{1,3}(,\d{3})*(\.\d+)?$/.test(x)) x = x.replace(/,/g, "");     // 35,000.00 (Geld)
+    else x = x.replace(",", ".");                                                   // 9,1
+    const n = parseFloat(x);
+    if (!isNaN(n)) return n;
+  }
+  return s.toLowerCase();
+}
+const collator = new Intl.Collator("de", { numeric: true, sensitivity: "base" });
+let tblCounter = 0;                         // zählt die Tabellen einer Ansicht (für die gespeicherte Sortierung)
 function tbl(cols, rows, emptyText, acts, main = !!acts) {
-  const th = cols.map(c => `<th class="${c[1] ? "n" : ""}">${c[0]}</th>`).join("") + (acts ? `<th class="act"><span class="sr">Aktionen</span></th>` : "");
+  const key = UI.view + ":" + (tblCounter++);
+  const srt = UI.sort[key];
+  if (srt && rows.length) {
+    const numeric = !!cols[srt.col]?.[1], dir = srt.dir === "desc" ? -1 : 1;
+    rows = rows.map((r, i) => ({ r, i, k: sortKey(r.cells[srt.col], numeric) }))
+      .sort((a, b) => {
+        if (a.k === null || b.k === null) return a.k === b.k ? a.i - b.i : a.k === null ? 1 : -1;
+        const c = typeof a.k === "number" && typeof b.k === "number" ? a.k - b.k : collator.compare(String(a.k), String(b.k));
+        return c ? c * dir : a.i - b.i;
+      }).map(x => x.r);
+  }
+  const th = cols.map((c, i) => {
+    const on = srt && srt.col === i, arrow = on ? (srt.dir === "desc" ? "▼" : "▲") : "▲";
+    return c[0] ? `<th class="${c[1] ? "n" : ""} sortable${on ? " sorted" : ""}" data-col="${i}" aria-sort="${on ? (srt.dir === "desc" ? "descending" : "ascending") : "none"}" title="Sortieren">${c[0]}<span class="arrow" aria-hidden="true">${arrow}</span></th>`
+      : `<th></th>`;
+  }).join("") + (acts ? `<th class="act"><span class="sr">Aktionen</span></th>` : "");
   const sel = UI.sel[UI.view];
   const body = rows.length ? rows.map(r => `<tr data-id="${esc(r.id)}" class="${r.id === sel ? "sel" : ""}">${r.cells.map((v, i) => `<td class="${cols[i][1] ? "n" : ""}${cols[i][2] ? " dim" : ""}">${v}</td>`).join("")}${acts ? `<td class="act">${acts(r.id)}</td>` : ""}</tr>`).join("")
     : `<tr><td colspan="${cols.length + (acts ? 1 : 0)}" class="empty">${emptyText}</td></tr>`;
-  return `<div class="tablewrap${main ? " mainList" : ""}"><table><thead><tr>${th}</tr></thead><tbody>${body}</tbody></table></div>`;
+  return `<div class="tablewrap${main ? " mainList" : ""}" data-tkey="${key}"><table><thead><tr>${th}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
 /* Knöpfe in der Tabellenzeile; ein Klick wählt zugleich die Zeile aus */
 const rb = (action, label, cls = "") => `<button class="btn sm ${cls}" data-a="${action}">${label}</button>`;
@@ -354,10 +391,42 @@ function kunden() {
 }
 
 /* Katalog */
-const CAT_FILTER = { make: "", cat: "", ekMin: "", ekMax: "", vkMin: "", vkMax: "", marginMin: "", status: "alle", stock: "" };
+const CAT_FILTER = { make: "", cat: "", ekMin: "", ekMax: "", vkMin: "", vkMax: "", marginMin: "", status: "aktiv", stock: "" };
 UI.cf = { ...CAT_FILTER };
 UI.cfOpen = false;
 function fnum(v) { if (v === "" || v === undefined) return null; try { return parseMoney(v); } catch (e) { return null; } }
+/* Doppel-Schieberegler von 0 bis zum höchsten Preis. Rechter Regler am Anschlag = unbegrenzt. */
+const usd0 = v => "$" + new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(v);
+function rangeTop(values) {
+  const max = Math.max(0, ...values);
+  if (!max) return { top: 1000, step: 10 };
+  const step = Math.max(1, Math.pow(10, Math.floor(Math.log10(max / 100))));
+  return { top: Math.ceil(max / step) * step, step };
+}
+function dualRange(name, label, values, min, max) {
+  const { top, step } = rangeTop(values);
+  const lo = Math.min(fnum(min) ?? 0, top), hi = Math.min(fnum(max) ?? top, top);
+  return `<fieldset class="range dual" data-range="${name}" data-top="${top}"><legend>${label}</legend>
+    <div class="dualVals"><span id="dv_${name}Lo">${usd0(lo)}</span><span id="dv_${name}Hi">${hi >= top ? usd0(top) + " (max.)" : usd0(hi)}</span></div>
+    <div class="dualTrack"><div class="dualFill" id="df_${name}" style="left:${lo / top * 100}%;right:${100 - hi / top * 100}%"></div>
+      <input type="range" id="dr_${name}Min" min="0" max="${top}" step="${step}" value="${lo}" aria-label="${label} von">
+      <input type="range" id="dr_${name}Max" min="0" max="${top}" step="${step}" value="${hi}" aria-label="${label} bis"></div></fieldset>`;
+}
+/* Beim Ziehen nur Anzeige aktualisieren, beim Loslassen filtern */
+function dualRangeInput(el, apply) {
+  const box = el.closest(".dual"), name = box.dataset.range, top = +box.dataset.top;
+  const a = $("#dr_" + name + "Min"), b = $("#dr_" + name + "Max");
+  let lo = +a.value, hi = +b.value;
+  if (lo > hi) { if (el === a) { lo = hi; a.value = lo; } else { hi = lo; b.value = hi; } }
+  $("#dv_" + name + "Lo").textContent = usd0(lo);
+  $("#dv_" + name + "Hi").textContent = hi >= top ? usd0(top) + " (max.)" : usd0(hi);
+  const fill = $("#df_" + name); fill.style.left = lo / top * 100 + "%"; fill.style.right = 100 - hi / top * 100 + "%";
+  if (apply) {
+    UI.cf[name + "Min"] = lo > 0 ? lo : "";
+    UI.cf[name + "Max"] = hi < top ? hi : "";
+    render();
+  }
+}
 function catFilterCount() { return Object.entries(CAT_FILTER).filter(([k, v]) => String(UI.cf[k] ?? "") !== String(v)).length; }
 
 function katalog() {
@@ -385,10 +454,10 @@ function katalog() {
   const panel = UI.cfOpen ? `<div class="filters">
       ${sel("cf_make", "Hersteller", [["", "Alle Hersteller"], ...makes.map(x => [x, x])], f.make)}
       ${sel("cf_cat", "Klasse", [["", "Alle Klassen"], ...cats.map(x => [x, x])], f.cat)}
-      ${sel("cf_status", "Status", [["alle", "Aktive und inaktive"], ["aktiv", "Nur aktive"], ["inaktiv", "Nur inaktive"]], f.status)}
+      ${sel("cf_status", "Status", [["aktiv", "Nur aktive"], ["alle", "Aktive und inaktive"], ["inaktiv", "Nur inaktive"]], f.status)}
       ${sel("cf_stock", "Im Bestand", [["", "Egal"], ["ja", "Mindestens 1 im Bestand"], ["nein", "Nicht im Bestand"]], f.stock)}
-      <fieldset class="range"><legend>Einkaufspreis (EK)</legend>${inp("cf_ekMin", "von", f.ekMin, "0")}${inp("cf_ekMax", "bis", f.ekMax, "unbegrenzt")}</fieldset>
-      <fieldset class="range"><legend>Verkaufspreis (VK)</legend>${inp("cf_vkMin", "von", f.vkMin, "0")}${inp("cf_vkMax", "bis", f.vkMax, "unbegrenzt")}</fieldset>
+      ${dualRange("ek", "Einkaufspreis (EK)", S.models.map(m => m.ek), f.ekMin, f.ekMax)}
+      ${dualRange("vk", "Verkaufspreis (VK)", S.models.map(m => m.vk), f.vkMin, f.vkMax)}
       ${inp("cf_marginMin", "Marge mindestens (%)", f.marginMin, "z. B. 20")}
       <div class="fend">${btn("cfReset", "Filter zurücksetzen")}</div></div>` : "";
   return head("Stammdaten", "Fahrzeugkatalog", "Modelle mit Standard-Einkaufs- und Verkaufspreis. Grundlage für Bestellungen und neue Fahrzeuge.") +
@@ -900,6 +969,12 @@ const DOUBLE = { bestand: "vEdit", ausstellung: "sMove", angebote: "aEdit", best
 async function act(fn) { try { const r = await fn(); render(); r?.message && toast(r.message); } catch (e) { toast(e.message); } }
 
 document.addEventListener("click", e => {
+  const th = e.target.closest("#main th.sortable");
+  if (th) {                                 // Spalte sortieren: aufsteigend, dann absteigend
+    const key = th.closest(".tablewrap").dataset.tkey, col = +th.dataset.col, cur = UI.sort[key];
+    UI.sort[key] = { col, dir: cur && cur.col === col && cur.dir === "asc" ? "desc" : "asc" };
+    render(); return;
+  }
   const a = e.target.closest("[data-a]");
   if (a) {
     e.preventDefault();
@@ -915,6 +990,7 @@ document.addEventListener("dblclick", e => { if (!e.target.closest("button, sele
 document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#ov") && $("#ov [data-a=close]")) close(); });
 document.addEventListener("input", e => {
   if (e.target.id === "q") { UI.q[UI.view] = e.target.value; const pos = e.target.selectionStart; render(); const q = $("#q"); q.focus(); q.setSelectionRange(pos, pos); }
+  if (e.target.matches(".dual input[type=range]")) { dualRangeInput(e.target, false); return; }
   if (e.target.matches("[data-cf]")) {           // Katalogfilter: sofort anwenden, Fokus behalten
     const id = e.target.id, isText = e.target.tagName === "INPUT", pos = isText ? e.target.selectionStart : null;
     UI.cf[id.slice(3)] = e.target.value; render();
@@ -923,6 +999,7 @@ document.addEventListener("input", e => {
 });
 document.addEventListener("change", e => {
   const t = e.target;
+  if (t.matches(".dual input[type=range]")) { const id = t.id; dualRangeInput(t, true); document.getElementById(id)?.focus(); return; }
   if (t.id === "fStatus") { UI.filter.bestand = t.value; render(); }
   if (t.id === "fCond") { UI.filter.cond = t.value; render(); }
   if (t.id === "fOpen") { UI.filter.openOnly = t.checked; render(); }

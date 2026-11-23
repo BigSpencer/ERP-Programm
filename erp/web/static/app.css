@@ -255,3 +255,29 @@ th.act { position: sticky; right: 0; z-index: 3; }
 td.act { background: var(--surface); }
 td .btn.sm { padding: 3px 9px; }
 td.act .btn.sm + .btn.sm { margin-left: 4px; }
+
+/* Sortierbare Spaltenköpfe */
+th.sortable { cursor: pointer; user-select: none; }
+th.sortable:hover { color: var(--gold-light); }
+th .arrow { display: inline-block; margin-left: 5px; font-size: 9px; opacity: 0; transition: opacity .12s; }
+th.sortable:hover .arrow { opacity: .45; }
+th.sorted { color: var(--gold-light); }
+th.sorted .arrow { opacity: 1; color: var(--gold); }
+
+/* Doppel-Schieberegler */
+.filters .range.dual { display: flex; flex-direction: column; gap: 8px; }
+.dualVals { display: flex; justify-content: space-between; font-size: 13px; color: var(--text); font-variant-numeric: tabular-nums; }
+.dualTrack { position: relative; height: 22px; }
+.dualTrack::before { content: ""; position: absolute; left: 0; right: 0; top: 9px; height: 4px; border-radius: 2px; background: var(--border-strong); }
+.dualFill { position: absolute; top: 9px; height: 4px; border-radius: 2px; background: var(--gold); }
+.dualTrack input[type=range] { position: absolute; left: 0; top: 0; width: 100%; height: 22px; margin: 0; padding: 0; background: none; border: 0;
+  pointer-events: none; -webkit-appearance: none; appearance: none; }
+.dualTrack input[type=range]:focus { outline: none; }
+.dualTrack input[type=range]::-webkit-slider-runnable-track { background: none; height: 22px; }
+.dualTrack input[type=range]::-moz-range-track { background: none; }
+.dualTrack input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; pointer-events: auto; width: 18px; height: 18px; margin-top: 2px;
+  border-radius: 50%; background: var(--gold); border: 2px solid var(--bg); box-shadow: 0 0 0 1px var(--gold-dark); cursor: grab; }
+.dualTrack input[type=range]::-moz-range-thumb { pointer-events: auto; width: 16px; height: 16px; border-radius: 50%; background: var(--gold);
+  border: 2px solid var(--bg); box-shadow: 0 0 0 1px var(--gold-dark); cursor: grab; }
+.dualTrack input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--gold-light); }
+.dualTrack input[type=range]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px var(--gold-light); }
