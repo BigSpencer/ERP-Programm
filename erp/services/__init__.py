@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import contextvars
+import re
 from decimal import Decimal, InvalidOperation
 
 from sqlalchemy import select
@@ -58,8 +59,12 @@ def next_number(s: Session, key: str) -> str:
     return f"{rng.prefix}{value:0{rng.width}d}"
 
 
+_US_THOUSANDS = re.compile(r"^-?\d{1,3}(,\d{3})+$")
+
+
 def dec(value, default: str = "0") -> Decimal:
-    """Wandelt Eingaben (auch '1.234,56') robust in Decimal um."""
+    """Wandelt Eingaben robust in Decimal um: amerikanisch ("1,234.56", "120,000")
+    und deutsch ("1.234,56", "1,5")."""
     if value is None or value == "":
         return Decimal(default)
     if isinstance(value, Decimal):
@@ -67,8 +72,16 @@ def dec(value, default: str = "0") -> Decimal:
     if isinstance(value, (int, float)):
         return Decimal(str(value))
     text = str(value).strip().replace(" ", "").replace("€", "").replace("$", "")
-    if "," in text:
-        text = text.replace(".", "").replace(",", ".")
+    if "," in text and "." in text:
+        if text.rfind(",") > text.rfind("."):      # deutsch: 1.234,56
+            text = text.replace(".", "").replace(",", ".")
+        else:                                        # amerikanisch: 1,234.56
+            text = text.replace(",", "")
+    elif "," in text:
+        if _US_THOUSANDS.match(text):                # amerikanisch: 120,000
+            text = text.replace(",", "")
+        else:                                        # deutsch: 1,5
+            text = text.replace(",", ".")
     try:
         return Decimal(text)
     except InvalidOperation as exc:

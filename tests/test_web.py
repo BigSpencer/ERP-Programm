@@ -64,7 +64,7 @@ def test_dealer_flow_over_api(client):
     do(client, "receiveOrder", {"id": oid, "vin": "W1"})
     sale = do(client, "sell", {"vehicleId": vid, "customerId": cid, "price": "", "pay": "bar",
                                "trade": {"make": "Alt", "model": "Wagen", "value": "20.000"}})
-    assert "Rohertrag $30.000,00" in sale["message"]
+    assert "Rohertrag $30,000.00" in sale["message"]
     do(client, "purchase", {"customerId": cid, "make": "Gebraucht", "model": "Kombi", "price": "9.000", "pay": "bank",
                             "margin": True})
     do(client, "importModels", {"text": "Hersteller;Modell;EK;VK\nNova;Van;20.000;30.000\n"})
@@ -126,7 +126,7 @@ def test_offer_order_sale_over_api(client):
     order_id = r["id"]
     do(client, "orderStatus", {"id": order_id, "status": "eingetroffen", "vin": "W9F"})
     r = do(client, "orderStatus", {"id": order_id, "status": "ausgeliefert", "pay": "bar"})
-    assert r["sale"] and "Restzahlung $90.000,00" in r["message"]
+    assert r["sale"] and "Restzahlung $90,000.00" in r["message"]
     st = client.get("/api/state").json()
     assert st["offers"][0]["status"] == "bestellt" and st["orders"][0]["status"] == "ausgeliefert"
     sale = st["sales"][0]
@@ -157,7 +157,7 @@ def test_trade_in_selection_over_api(client):
     order_id = do(client, "offerStatus", {"id": oid, "status": "bestellt", "deposit": "10.000"})["id"]
     do(client, "orderStatus", {"id": order_id, "status": "eingetroffen"})
     r = do(client, "orderStatus", {"id": order_id, "status": "ausgeliefert", "tradePurchaseId": pid})
-    assert "Restzahlung $32.000,00" in r["message"]
+    assert "Restzahlung $32,000.00" in r["message"]
     st = client.get("/api/state").json()
     p = st["purchases"][0]
     assert p["status"] == "verrechnet" and p["saleId"] == st["sales"][0]["id"]

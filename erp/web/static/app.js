@@ -6,7 +6,7 @@
 /* ------------------------------------------------------------------ Hilfen */
 const $ = (s, r = document) => r.querySelector(s);
 const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const eur = new Intl.NumberFormat("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const eur = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });   // Geld: 120,000.00
 const intf = new Intl.NumberFormat("de-DE");
 const money = v => { const n = Number(v) || 0; return (n < 0 ? "-$" : "$") + eur.format(Math.abs(n)); };
 const num = v => eur.format(Number(v) || 0);
@@ -22,8 +22,11 @@ function parseMoney(v) {
   if (typeof v === "number") return v;
   let t = String(v).replace(/\$|€|EUR|\s/g, "");
   if (t === "") return 0;
+  // Amerikanisch (120,000.00 / 120,000) und deutsch (80.000 / 1.234,56) werden erkannt
   if (/^-?\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, "");
-  else if (t.includes(",")) t = t.replace(/\./g, "").replace(",", ".");
+  else if (t.includes(",") && t.includes(".")) t = t.lastIndexOf(",") > t.lastIndexOf(".") ? t.replace(/\./g, "").replace(",", ".") : t.replace(/,/g, "");
+  else if (/^-?\d{1,3}(,\d{3})+$/.test(t)) t = t.replace(/,/g, "");
+  else if (t.includes(",")) t = t.replace(",", ".");
   const n = Number(t);
   if (!isFinite(n)) throw new Fehler("Ungültiger Betrag: " + v);
   return round2(n);

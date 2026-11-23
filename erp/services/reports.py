@@ -13,9 +13,9 @@ from . import finance, get_setting, inventory
 
 
 def money(value) -> str:
+    """Geldbetrag im amerikanischen Format: 120,000.00 (Währungszeichen setzt der Aufrufer)."""
     v = Decimal(value or 0).quantize(Decimal("0.01"))
-    s = f"{v:,.2f}"
-    return s.replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"{v:,.2f}"
 
 
 def kpis(s: Session) -> dict:
