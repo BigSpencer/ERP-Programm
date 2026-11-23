@@ -571,7 +571,7 @@ ACTIONS.update({"uploadLogo": ("admin", a_upload_logo), "resetLogo": ("admin", a
 def index_html() -> str:
     v = asset_version()
     html = (STATIC / "index.html").read_text(encoding="utf-8")
-    return (html.replace("/static/app.js", f"/static/app.js?v={v}")
+    return (html.replace("APPVERSION", __version__).replace("/static/app.js", f"/static/app.js?v={v}")
                 .replace("/static/app.css", f"/static/app.css?v={v}"))
 
 

@@ -154,7 +154,7 @@ ausführen (Netzfreigabe in `pg_hba.conf`/`postgresql.conf` beachten, siehe Date
 Der GitHub-Actions-Workflow baut bei jedem Push fertige Pakete
 (Actions → *Tests & Installer* → Artefakte):
 
-* Windows: `ERPDesk-Setup-2.0.2.exe` (Installer mit Startmenü- und Desktop-Verknüpfung)
+* Windows: `ERPDesk-Setup-2.1.1.exe` (Installer mit Startmenü- und Desktop-Verknüpfung)
 * macOS / Linux: Ordner `ERPDesk/` mit ausführbarer Datei
 
 Selbst bauen:
