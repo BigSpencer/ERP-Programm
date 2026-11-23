@@ -318,3 +318,5 @@ fieldset.checks small { display: block; color: var(--faint); font-size: 11px; }
 .statTiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 @media (max-width: 760px) { .statTiles { grid-template-columns: minmax(0, 1fr); } }
 .periodHint { color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.due { color: var(--pos); font-weight: 600; }
+.due::before { content: "● "; font-size: 9px; vertical-align: 2px; }

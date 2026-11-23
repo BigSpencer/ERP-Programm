@@ -250,7 +250,7 @@ function cockpit() {
     <div class="two"><div><h3 class="eyebrow">Längste Standzeit</h3>${tbl([["Fahrzeug"], ["Status"], ["Tage", 1], ["VK", 1]],
       aging.map(v => ({ id: v.id, cells: [esc(vLabel(v)), pill(v.status, STATUS[v.status]), days(v.inDate), num(v.vk)] })), "Kein Fahrzeug im Bestand")}</div>
     <div><h3 class="eyebrow">Erwartete Fahrzeuge</h3>${tbl([["Bestellung"], ["Modell"], ["Für"], ["Liefertermin", 1]],
-      exp.map(o => { const m = byId("models", o.modelId); return { id: o.id, cells: [o.nr, esc(m ? m.make + " " + m.model : ""), esc(o.customerId ? custName(o.customerId) : "Lager"), `<span class="${o.expected && o.expected < today() ? "late" : ""}">${de(o.expected) || "–"}</span>`] }; }), "Keine offenen Bestellungen")}</div></div>`;
+      exp.map(o => { const m = byId("models", o.modelId); return { id: o.id, cells: [o.nr, esc(m ? m.make + " " + m.model : ""), esc(o.customerId ? custName(o.customerId) : "Lager"), deliveryCell(o)] }; }), "Keine offenen Bestellungen")}</div></div>`;
 }
 function chart(data) {
   const W = 960, H = 230, L = 64, B = 28, T = 16, max = Math.max(...data.map(d => d[1]), 1);
@@ -303,6 +303,15 @@ function ausstellung() {
 }
 
 /* Bestellungen */
+/* Liefertermin: heute = grün, überfällig = rot (nur solange das Fahrzeug noch nicht eingetroffen ist) */
+function deliveryCell(o) {
+  if (!o.expected) return "–";
+  const open = o.status === "bestellt", t0 = today();
+  if (open && o.expected === t0) return `<span class="due" title="Liefertermin ist heute">${de(o.expected)} · heute</span>`;
+  if (open && o.expected < t0) return `<span class="late">${de(o.expected)} · überfällig</span>`;
+  return de(o.expected);
+}
+
 /* Status-Auswahl in der Tabellenzeile: zeigt nur erlaubte Wechsel */
 function statusSelect(kind, id, cur, labels, allowedNext) {
   const opts = [cur, ...allowedNext.filter(x => x !== cur)];
@@ -353,9 +362,9 @@ function bestellungen() {
     `<div class="bar">${searchBox("Bestellung, Modell, Kunde …")}<label style="display:flex;gap:6px;align-items:center"><input id="fOpen" type="checkbox" ${UI.filter.openOnly ? "checked" : ""}> nur offene</label>
     <span class="grow"></span>${btn("oNew", "Neue Bestellung", "primary")}${btn("oDoc", "Bestellbestätigung")}</div>` +
     tbl([["Nr."], ["Datum"], ["Modell"], ["Farbe", 0, 1], ["Für Kunde"], ["VK", 1], ["Anzahlung", 1], ["Offen", 1], ["Liefertermin"], ["Status"], ["Fahrzeug", 0, 1], ["Angebot", 0, 1]],
-      list.map(o => { const m = byId("models", o.modelId), late = o.status === "bestellt" && o.expected && o.expected < today();
+      list.map(o => { const m = byId("models", o.modelId);
         return { id: o.id, cells: [o.nr, de(o.date), esc(m ? `${m.model} – ${m.make}` : ""), esc(o.color), esc(o.customerId ? custName(o.customerId) : "– Lager –"), num(o.vk), num(o.deposit), num(o.vk - o.deposit),
-          `<span class="${late ? "late" : ""}">${de(o.expected) || "–"}${late ? " · überfällig" : ""}</span>`,
+          deliveryCell(o),
           statusSelect("order", o.id, o.status, ORDER_STATUS, orderNext(o)), o.vehicleId ? byId("vehicles", o.vehicleId)?.nr || "" : "", offerNr(o.id)] }; }),
       "Keine Bestellungen", id => (byId("orders", id).status === "bestellt" ? rb("oEdit", "Bearbeiten") : "") + rbAdmin());
 }
