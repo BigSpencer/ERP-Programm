@@ -226,8 +226,8 @@ function bestand() {
     <select id="fCond" aria-label="Zustand"><option value="">Neu & gebraucht</option><option value="neu" ${UI.filter.cond === "neu" ? "selected" : ""}>Neu</option><option value="gebraucht" ${UI.filter.cond === "gebraucht" ? "selected" : ""}>Gebraucht</option></select>
     <span class="grow"></span>${btn("vNew", "Neues Fahrzeug", "primary")}${btn("vShow", "Ausstellen")}${btn("vRes", "Reservieren")}${btn("vUnres", "Reservierung aufheben")}
     ${allowed("verkauf") ? btn("vSell", "Verkaufen") : ""}</div>` +
-    tbl([["Nr."], ["Fahrzeug"], ["Klasse", 0, 1], ["Zustand"], ["Farbe", 0, 1], ["Kennzeichen"], ["FIN", 0, 1], ["km", 1], ["EK", 1], ["VK", 1], ["Marge", 1], ["Tage", 1], ["Status"], ["Stellplatz / Reserviert für"]],
-      list.map(v => ({ id: v.id, cells: [v.nr, esc(vName(v)), esc(v.cat), v.cond === "neu" ? "Neu" : "Gebraucht", esc(v.color), esc(v.plate), esc(v.vin), intf.format(v.km), num(v.ek), num(v.vk), num(v.vk - v.ek),
+    tbl([["Nr."], ["Modell"], ["Hersteller"], ["Klasse", 0, 1], ["Zustand"], ["Farbe", 0, 1], ["Kennzeichen"], ["FIN", 0, 1], ["km", 1], ["EK", 1], ["VK", 1], ["Marge", 1], ["Tage", 1], ["Status"], ["Stellplatz / Reserviert für"]],
+      list.map(v => ({ id: v.id, cells: [v.nr, esc(v.model), esc(v.make), esc(v.cat), v.cond === "neu" ? "Neu" : "Gebraucht", esc(v.color), esc(v.plate), esc(v.vin), intf.format(v.km), num(v.ek), num(v.vk), num(v.vk - v.ek),
         AVAILABLE.includes(v.status) ? days(v.inDate) : "–", pill(v.status, STATUS[v.status]), esc(v.status === "reserviert" ? custName(v.resFor) : v.loc)] })),
       S.vehicles.length ? "Keine Fahrzeuge für diesen Filter" : "Noch keine Fahrzeuge. Lege eins an oder buche den Eingang einer Bestellung.",
       id => rb("vEdit", "Bearbeiten") + (["lager", "ausstellung"].includes(byId("vehicles", id).status) ? rb("vRemove", "Ausbuchen", "danger") : "") + rbAdmin()) +
@@ -240,8 +240,8 @@ function ausstellung() {
   return head("Autohaus", "Ausstellung", "Showroom nach Stellplatz. Ein Stellplatz kann nur mit einem Fahrzeug belegt sein.") +
     `<div class="bar">${searchBox("Stellplatz, Fahrzeug …")}<span class="grow"></span>${btn("sShow", "Fahrzeug ausstellen", "primary")}
     ${btn("vRes", "Reservieren")}${allowed("verkauf") ? btn("vSell", "Verkaufen") : ""}</div>` +
-    tbl([["Stellplatz"], ["Nr."], ["Fahrzeug"], ["Klasse", 0, 1], ["Farbe", 0, 1], ["VK", 1], ["Seit", 1], ["Tage", 1], ["Status"], ["Reserviert für"]],
-      list.map(v => ({ id: v.id, cells: [esc(v.loc || "–"), v.nr, esc(vName(v)), esc(v.cat), esc(v.color), num(v.vk), de(v.showSince), days(v.showSince), pill(v.status, STATUS[v.status]), esc(custName(v.resFor))] })),
+    tbl([["Stellplatz"], ["Nr."], ["Modell"], ["Hersteller"], ["Klasse", 0, 1], ["Farbe", 0, 1], ["VK", 1], ["Seit", 1], ["Tage", 1], ["Status"], ["Reserviert für"]],
+      list.map(v => ({ id: v.id, cells: [esc(v.loc || "–"), v.nr, esc(v.model), esc(v.make), esc(v.cat), esc(v.color), num(v.vk), de(v.showSince), days(v.showSince), pill(v.status, STATUS[v.status]), esc(custName(v.resFor))] })),
       "Noch kein Fahrzeug ausgestellt", id => rb("sMove", "Stellplatz") + rb("sOut", "Herausnehmen") + rbAdmin()) + `<div class="foot">${list.length} Fahrzeug(e) in der Ausstellung</div>`;
 }
 
@@ -361,7 +361,11 @@ function fnum(v) { if (v === "" || v === undefined) return null; try { return pa
 function catFilterCount() { return Object.entries(CAT_FILTER).filter(([k, v]) => String(UI.cf[k] ?? "") !== String(v)).length; }
 
 function katalog() {
-  const inStock = {}; S.vehicles.filter(v => AVAILABLE.includes(v.status)).forEach(v => inStock[v.modelId] = (inStock[v.modelId] || 0) + 1);
+  // Bestand je Modell: über die Verknüpfung, sonst über gleichen Hersteller + Modell
+  const key = (mk, md) => (mk + "|" + md).trim().toLowerCase(), byName = {};
+  S.models.forEach(m => { byName[key(m.make, m.model)] ??= m.id; });
+  const inStock = {};
+  S.vehicles.filter(v => AVAILABLE.includes(v.status)).forEach(v => { const id = v.modelId && byId("models", v.modelId) ? v.modelId : byName[key(v.make, v.model)]; if (id) inStock[id] = (inStock[id] || 0) + 1; });
   const f = UI.cf, ekMin = fnum(f.ekMin), ekMax = fnum(f.ekMax), vkMin = fnum(f.vkMin), vkMax = fnum(f.vkMax), mMin = fnum(f.marginMin);
   const pct = m => m.vk ? (m.vk - m.ek) / m.vk * 100 : 0;
   const list = S.models.filter(m => match([m.nr, m.make, m.model, m.cat].join(" "))

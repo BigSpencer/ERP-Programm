@@ -277,3 +277,15 @@ def test_trade_in_cancel_without_booking(s):
     dealer.cancel_purchase(s, ti.id)
     assert ti.status == "cancelled" and ti.vehicle.status == "removed"
     assert all(x == 0 for x in _bal(s).values())
+
+
+def test_vehicles_linked_to_catalog_by_name(s):
+    v = dealer.save_vehicle(s, None, {"make": "Karin", "model": "190z"})      # vor dem Katalogeintrag angelegt
+    assert v.model_id is None
+    model = dealer.save_model(s, None, {"make": "karin ", "model": "190Z", "category": "Klassiker"})
+    assert v.model_id == model.id and v.category == "Klassiker"               # beim Anlegen des Modells verknüpft
+    v2 = dealer.save_vehicle(s, None, {"make": "KARIN", "model": "190z"})      # eingetippt -> sofort verknüpft
+    assert v2.model_id == model.id and v2.category == "Klassiker"
+    s.execute(m.Vehicle.__table__.update().values(model_id=None))
+    s.expire_all()
+    assert dealer.link_vehicles_to_catalog(s) == 2                             # Nachverknüpfung beim Start

@@ -555,6 +555,7 @@ def create_app(url: str | None = None) -> FastAPI:
         db.init_schema()
         with db.session_scope() as s:            # Spielbetrieb: Fahrzeuge werden immer ohne Steuer gerechnet
             set_setting(s, "vehicle_vat_rate", "0")
+            dealer.link_vehicles_to_catalog(s)  # Fahrzeuge ohne Katalogbezug nachträglich verknüpfen
         initial = os.environ.get("ERP_ADMIN_PASSWORD")
         if initial:
             with db.session_scope() as s:

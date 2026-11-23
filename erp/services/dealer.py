@@ -160,6 +160,7 @@ def save_model(s: Session, model_id: int | None, data: dict, version: int | None
     if not obj.number:
         obj.number = next_number(s, "vehicle_model")
     s.flush()
+    link_vehicles_to_catalog(s)
     audit(s, "update" if model_id else "create", "vehicle_model", obj.id, obj.name)
     return obj
 
@@ -232,6 +233,7 @@ def import_models_csv(s: Session, text: str) -> tuple[int, int]:
                     setattr(obj, key, data[key])
             updated += 1
     s.flush()
+    link_vehicles_to_catalog(s)
     audit(s, "import", "vehicle_model", "", f"{created} neu, {updated} aktualisiert")
     return created, updated
 
@@ -275,6 +277,12 @@ def save_vehicle(s: Session, vehicle_id: int | None, data: dict, version: int | 
                 data["list_price"] = model.sales_price
     if not data.get("make") or not data.get("model"):
         raise BusinessError("Bitte ein Katalogmodell wählen oder Hersteller und Modell angeben")
+    if model is None:                       # eingetippt: passendes Katalogmodell verknüpfen
+        model = find_model(s, data["make"], data["model"])
+        if model is not None:
+            data["model_id"] = model.id
+            if not data.get("category"):
+                data["category"] = model.category
     if data.get("condition", "new") not in m.VEHICLE_CONDITION:
         raise BusinessError("Ungültiger Zustand")
     for key in ("purchase_price", "list_price"):
@@ -301,6 +309,31 @@ def save_vehicle(s: Session, vehicle_id: int | None, data: dict, version: int | 
     s.flush()
     audit(s, "update" if vehicle_id else "create", "vehicle", obj.number, obj.name)
     return obj
+
+
+def find_model(s: Session, make: str, model: str) -> m.VehicleModel | None:
+    """Katalogmodell mit gleichem Hersteller und Modell (Groß-/Kleinschreibung egal)."""
+    if not make or not model:
+        return None
+    return s.scalars(select(m.VehicleModel).where(
+        func.lower(func.trim(m.VehicleModel.make)) == make.strip().lower(),
+        func.lower(func.trim(m.VehicleModel.model)) == model.strip().lower())
+        .order_by(m.VehicleModel.active.desc(), m.VehicleModel.id)).first()
+
+
+def link_vehicles_to_catalog(s: Session) -> int:
+    """Verknüpft Fahrzeuge ohne Katalogbezug mit dem passenden Katalogmodell. Gibt die Anzahl zurück."""
+    linked = 0
+    for v in s.scalars(select(m.Vehicle).where(m.Vehicle.model_id.is_(None))):
+        found = find_model(s, v.make, v.model)
+        if found is not None:
+            v.model_id = found.id
+            if not v.category:
+                v.category = found.category
+            linked += 1
+    if linked:
+        s.flush()
+    return linked
 
 
 def _require_status(v: m.Vehicle, allowed: tuple, action: str):
