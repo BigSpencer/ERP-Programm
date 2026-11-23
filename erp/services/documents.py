@@ -97,7 +97,7 @@ def confirm_sales_order(s: Session, order_id: int) -> list[str]:
     if limit > 0:
         exposure = open_receivables(s, so.customer_id) + so.gross_total
         if exposure > limit:
-            raise BusinessError(f"Kreditlimit überschritten: {exposure:.2f} > {limit:.2f} EUR")
+            raise BusinessError(f"Kreditlimit überschritten: {exposure:.2f} > {limit:.2f} $")
     warnings = []
     for it in so.items:
         if it.product and it.product.stock_managed:

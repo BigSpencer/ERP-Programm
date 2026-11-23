@@ -866,7 +866,7 @@ def _vehicle_table(v: m.Vehicle | None, model: m.VehicleModel | None = None, col
 def _money_rows(rows: list[tuple[str, Decimal, bool]]) -> str:
     body = "".join(
         f"<tr><td align='right'>{'<b>' if bold else ''}{html.escape(label)}{'</b>' if bold else ''}</td>"
-        f"<td align='right' width='25%'>{'<b>' if bold else ''}{money(val)} €{'</b>' if bold else ''}</td></tr>"
+        f"<td align='right' width='25%'>{'<b>' if bold else ''}${money(val)}{'</b>' if bold else ''}</td></tr>"
         for label, val, bold in rows)
     return f"<table width='100%' cellspacing='0' cellpadding='4'>{body}</table>"
 

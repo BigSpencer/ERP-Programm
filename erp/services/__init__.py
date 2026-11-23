@@ -66,7 +66,7 @@ def dec(value, default: str = "0") -> Decimal:
         return value
     if isinstance(value, (int, float)):
         return Decimal(str(value))
-    text = str(value).strip().replace(" ", "").replace("€", "")
+    text = str(value).strip().replace(" ", "").replace("€", "").replace("$", "")
     if "," in text:
         text = text.replace(".", "").replace(",", ".")
     try:

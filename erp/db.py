@@ -150,7 +150,7 @@ DEFAULT_SETTINGS = {
     "company_city": "12345 Musterstadt",
     "company_vat_id": "",
     "company_iban": "",
-    "currency": "EUR",
+    "currency": "USD",
     "vehicle_vat_rate": "0",      # Fahrzeuge ohne Umsatzsteuer (Spielbetrieb)
 }
 

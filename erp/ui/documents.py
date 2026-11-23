@@ -205,7 +205,7 @@ class DocumentDialog(QDialog):
                 self.table.item(r, 6).setText("?")
         self.table.blockSignals(False)
         self.totals.setText(f"Netto {fmt_money(net)}  ·  USt {fmt_money(tax)}  ·  "
-                            f"<b>Brutto {fmt_money(net + tax)} EUR</b>")
+                            f"<b>Brutto ${fmt_money(net + tax)}</b>")
 
     def _save(self):
         items = [v for v in (self._row_values(r) for r in range(self.table.rowCount()))
@@ -343,7 +343,7 @@ class InvoicesPage(_StatusFilterPage):
         if info is None:
             return
         dlg = FormDialog(self, "Zahlungseingang", [
-            Field("amount", "Betrag EUR", "money", required=True),
+            Field("amount", "Betrag in $", "money", required=True),
             Field("date", "Zahlungsdatum", "date"),
             Field("account", "Geldkonto", "choice", [("1200", "1200 Bank"), ("1000", "1000 Kasse")],
                   required=True),

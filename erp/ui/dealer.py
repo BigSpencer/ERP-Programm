@@ -30,11 +30,11 @@ def _suppliers(s):
 
 def _models(s):
     models = sorted(dealer.search_models(s, only_active=True), key=lambda x: (x.model.lower(), x.make.lower()))
-    return [(x.id, f"{x.model} – {x.make}  ·  VK {fmt_money(x.sales_price)} €") for x in models]
+    return [(x.id, f"{x.model} – {x.make}  ·  VK ${fmt_money(x.sales_price)}") for x in models]
 
 
 def _available(s, exclude_status=()):
-    return [(v.id, f"{v.label}  ·  {m.VEHICLE_STATUS[v.status]}  ·  VK {fmt_money(v.list_price)} €")
+    return [(v.id, f"{v.label}  ·  {m.VEHICLE_STATUS[v.status]}  ·  VK ${fmt_money(v.list_price)}")
             for v in dealer.available_vehicles(s) if v.status not in exclude_status]
 
 
@@ -98,7 +98,7 @@ class CockpitPage(QWidget):
             self.tiles[key] = Tile(title)
             grid.addWidget(self.tiles[key], i // 4, i % 4)
         lay.addLayout(grid)
-        self.chart = BarChart(title="Fahrzeugverkäufe je Monat (EUR)")
+        self.chart = BarChart(title="Fahrzeugverkäufe je Monat ($)")
         lay.addWidget(self.chart)
         lower = QHBoxLayout()
         self.aging = DataTable(["Fahrzeug", "Status", "Standtage", "VK"])
@@ -130,12 +130,12 @@ class CockpitPage(QWidget):
         self.head.setText(f"{company} – Cockpit" if company else "Autohaus-Cockpit")
         for key, _, kind in self.TILES:
             v = k[key]
-            self.tiles[key].value.setText(f"{fmt_money(v)} €" if kind == "money" else str(v))
+            self.tiles[key].value.setText(f"${fmt_money(v)}" if kind == "money" else str(v))
         self.tiles["stock_count"].sub.setText(f"davon {k['used_count']} gebraucht, {k['reserved_count']} reserviert")
-        self.tiles["stock_value"].sub.setText(f"Listenwert {fmt_money(k['stock_list_value'])} €")
+        self.tiles["stock_value"].sub.setText(f"Listenwert ${fmt_money(k['stock_list_value'])}")
         self.tiles["showroom_count"].sub.setText(f"{k['models']} Modelle im Katalog")
         self.tiles["open_orders"].sub.setText(
-            f"{k['overdue_orders']} überfällig · Anzahlungen {fmt_money(k['deposits'])} €")
+            f"{k['overdue_orders']} überfällig · Anzahlungen ${fmt_money(k['deposits'])}")
         self.tiles["sales_month"].sub.setText(f"{k['sales_month_count']} Fahrzeug(e)")
         self.tiles["sales_year"].sub.setText(f"{k['sales_year_count']} Fahrzeug(e)")
         self.chart.set_data(monthly)
@@ -368,8 +368,8 @@ class VehiclesPage(VehicleActions, ListPage):
                                 m.VEHICLE_STATUS.get(v.status, v.status), extra]))
         ek = sum(r[1][9][1] for r in rows)
         vk = sum(r[1][10][1] for r in rows)
-        self._summary = (f"{len(rows)} Fahrzeug(e)  ·  Einkaufswert {fmt_money(ek)} €  ·  "
-                         f"Listenwert {fmt_money(vk)} €")
+        self._summary = (f"{len(rows)} Fahrzeug(e)  ·  Einkaufswert ${fmt_money(ek)}  ·  "
+                         f"Listenwert ${fmt_money(vk)}")
         return rows
 
     def refresh(self):
@@ -657,11 +657,11 @@ def vehicle_fields_trade_in():
 
 def _sell_summary(sale: m.VehicleSale) -> str:
     text = (f"Kaufvertrag {sale.number} erstellt.\n\nFahrzeug: {sale.vehicle.label}\n"
-            f"Käufer: {sale.customer.name}\nKaufpreis: {fmt_money(sale.price)} €\n")
+            f"Käufer: {sale.customer.name}\nKaufpreis: ${fmt_money(sale.price)}\n")
     if sale.trade_in_value:
-        text += (f"Inzahlungnahme: {fmt_money(sale.trade_in_value)} € ({sale.trade_in_vehicle.number})\n"
-                 f"Zahlbetrag: {fmt_money(sale.payment_amount)} €\n")
-    return text + f"Rohertrag: {fmt_money(sale.margin)} €"
+        text += (f"Inzahlungnahme: ${fmt_money(sale.trade_in_value)} ({sale.trade_in_vehicle.number})\n"
+                 f"Zahlbetrag: ${fmt_money(sale.payment_amount)}\n")
+    return text + f"Rohertrag: ${fmt_money(sale.margin)}"
 
 
 class VehicleSalesPage(ListPage):
@@ -697,8 +697,8 @@ class VehicleSalesPage(ListPage):
                                 m.VEHICLE_CONDITION.get(x.vehicle.condition, ""), x.customer.name, num(x.price),
                                 num(x.trade_in_value), num(x.payment_amount), num(x.purchase_price),
                                 num(x.margin), x.salesperson, m.DEAL_STATUS[x.status]]))
-        self._summary = (f"{n} Verkauf/Verkäufe  ·  Umsatz {fmt_money(total)} €  ·  "
-                         f"Rohertrag {fmt_money(margin)} €")
+        self._summary = (f"{n} Verkauf/Verkäufe  ·  Umsatz ${fmt_money(total)}  ·  "
+                         f"Rohertrag ${fmt_money(margin)}")
         return rows
 
     def refresh(self):

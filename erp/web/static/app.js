@@ -8,7 +8,7 @@ const $ = (s, r = document) => r.querySelector(s);
 const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const eur = new Intl.NumberFormat("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const intf = new Intl.NumberFormat("de-DE");
-const money = v => eur.format(Number(v) || 0) + " €";
+const money = v => { const n = Number(v) || 0; return (n < 0 ? "-$" : "$") + eur.format(Math.abs(n)); };
 const num = v => eur.format(Number(v) || 0);
 const round2 = v => Math.round(v * 100) / 100;
 const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;

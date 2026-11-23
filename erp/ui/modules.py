@@ -335,10 +335,10 @@ class PnLPage(QWidget):
             color = style.POSITIVE if r["result"] >= 0 else style.NEGATIVE
             self.result.setText(
                 f"<table cellpadding=6 style='font-size:13pt'>"
-                f"<tr><td>Erlöse</td><td align=right>{fmt_money(r['revenue'])} EUR</td></tr>"
-                f"<tr><td>Aufwand</td><td align=right>{fmt_money(r['expense'])} EUR</td></tr>"
+                f"<tr><td>Erlöse</td><td align=right>${fmt_money(r['revenue'])}</td></tr>"
+                f"<tr><td>Aufwand</td><td align=right>${fmt_money(r['expense'])}</td></tr>"
                 f"<tr><td><b>Ergebnis</b></td><td align=right style='color:{color}'><b>"
-                f"{fmt_money(r['result'])} EUR</b></td></tr></table>")
+                f"${fmt_money(r['result'])}</b></td></tr></table>")
 
 
 def finance_module():
@@ -448,7 +448,7 @@ def admin_module():
 # --------------------------------------------------------------------------
 
 class BarChart(QWidget):
-    def __init__(self, parent=None, title="Umsatz netto je Monat (EUR)"):
+    def __init__(self, parent=None, title="Umsatz netto je Monat ($)"):
         super().__init__(parent)
         self.title = title
         self.data: list[tuple[str, Decimal]] = []
@@ -565,7 +565,7 @@ class DashboardPage(QWidget):
         k, monthly, overdue, low = res
         for key, _, kind in self.TILES:
             v = k[key]
-            self.tiles[key].value.setText(f"{fmt_money(v)} €" if kind == "money" else str(v))
+            self.tiles[key].value.setText(f"${fmt_money(v)}" if kind == "money" else str(v))
         self.tiles["overdue_amount"].sub.setText(f"{k['overdue_count']} Rechnung(en)")
         self.chart.set_data(monthly)
         self.overdue.fill(overdue)

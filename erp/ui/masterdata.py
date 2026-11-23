@@ -121,7 +121,7 @@ class CustomersPage(MasterDataPage):
             CustomerHistoryDialog(self, sel).exec()
 
     def fields(self, s):
-        return PARTNER_FIELDS + [Field("credit_limit", "Kreditlimit EUR (0 = keins)", "money"),
+        return PARTNER_FIELDS + [Field("credit_limit", "Kreditlimit in $ (0 = keins)", "money"),
                                  Field("notes", "Notizen", "multiline"),
                                  Field("active", "Aktiv", "bool")]
 

@@ -267,7 +267,7 @@ def a_sell(s, b):
         "notes": _str(b.get("notes")), "trade_in": trade,
         "trade_in_purchase_id": _id(b.get("tradePurchaseId"))})
     return {"id": _s(sale.id), "message": f"Kaufvertrag {sale.number} erstellt · Rohertrag "
-                                          f"{dealer.money(sale.margin)} €"}
+                                          f"${dealer.money(sale.margin)}"}
 
 
 def a_cancel_sale(s, b):
@@ -341,7 +341,7 @@ def a_order_status(s, b):
         "trade_in_purchase_id": _id(b.get("tradePurchaseId"))})
     if isinstance(res, m.VehicleSale):
         return {"id": _s(res.id), "sale": True,
-                "message": f"Kaufvertrag {res.number} erstellt · Restzahlung {dealer.money(res.payment_amount)} €"}
+                "message": f"Kaufvertrag {res.number} erstellt · Restzahlung ${dealer.money(res.payment_amount)}"}
     if isinstance(res, m.Vehicle):
         return {"message": f"Fahrzeug {res.number} ist im Bestand"}
     return {"message": "Status geändert"}
