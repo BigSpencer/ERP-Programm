@@ -281,3 +281,28 @@ th.sorted .arrow { opacity: 1; color: var(--gold); }
   border: 2px solid var(--bg); box-shadow: 0 0 0 1px var(--gold-dark); cursor: grab; }
 .dualTrack input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--gold-light); }
 .dualTrack input[type=range]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px var(--gold-light); }
+
+/* Mehrfachauswahl im Katalogfilter */
+.ms { position: relative; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); min-width: 0; }
+.msBtn { display: flex; justify-content: space-between; align-items: center; gap: 8px; width: 100%; padding: 7px 9px; text-align: left; cursor: pointer;
+  background: var(--surface); border: 1px solid var(--border-strong); border-radius: 3px; color: var(--text); font-size: 13px; }
+.msBtn span { color: var(--muted); font-size: 10px; }
+.msBtn:hover, .ms.open .msBtn { border-color: var(--gold); }
+.ms.limited .msBtn { border-color: var(--gold-dark); color: var(--gold-light); }
+.msPanel { position: absolute; top: 100%; left: 0; right: 0; z-index: 20; margin-top: 4px; background: var(--surface-2); border: 1px solid var(--border-strong);
+  border-top: 2px solid var(--gold); border-radius: 3px; box-shadow: 0 12px 30px rgba(0, 0, 0, .55); padding: 8px; min-width: 220px; }
+.msHead { display: flex; gap: 6px; margin-bottom: 8px; }
+.msHead .btn.sm { flex: 1; padding: 4px 6px; font-size: 12px; }
+.msSearch { width: 100%; margin-bottom: 6px; font-size: 13px; }
+.msList { max-height: 260px; overflow-y: auto; display: flex; flex-direction: column; }
+.filters .msItem { display: flex; flex-direction: row; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 2px; cursor: pointer; color: var(--text); font-size: 13px; }
+.msItem:hover { background: var(--raised); }
+.msItem input { accent-color: var(--gold); width: 15px; height: 15px; flex: none; }
+.msItem span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.msItem em { font-style: normal; color: var(--faint); font-size: 11px; font-variant-numeric: tabular-nums; }
+/* Trefferzahl */
+.filters .fend { grid-column: span 2; display: flex; justify-content: flex-end; align-items: center; gap: 16px; }
+.hits { color: var(--muted); font-size: 13px; }
+.hits b { color: var(--gold-light); font-size: 20px; font-weight: 600; margin-right: 4px; font-variant-numeric: tabular-nums; }
+.hitsInline { color: var(--gold-light); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+@media (max-width: 1000px) { .filters .fend { grid-column: 1 / -1; } }

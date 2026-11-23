@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "erp-desk"
-version = "1.9.0"
+version = "1.10.0"
 description = "Modulares ERP-System (Stammdaten, Vertrieb, Einkauf, Lager, Finanzen) als Desktop-Client mit gemeinsamer Datenbank"
 readme = "README.md"
 requires-python = ">=3.10"

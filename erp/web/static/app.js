@@ -391,43 +391,83 @@ function kunden() {
 }
 
 /* Katalog */
-const CAT_FILTER = { make: "", cat: "", ekMin: "", ekMax: "", vkMin: "", vkMax: "", marginMin: "", status: "aktiv", stock: "" };
-UI.cf = { ...CAT_FILTER };
+/* ---------- Filter im Fahrzeugkatalog ----------
+   Mehrfachauswahl: gespeichert wird, was ABGEWÄHLT ist – neue Hersteller/Klassen sind dadurch automatisch angehakt.
+   Schieberegler: "" = am Anschlag (unbegrenzt). */
+const CAT_FILTER = { exMake: [], exCat: [], exStatus: ["inaktiv"], exStock: [], ekMin: "", ekMax: "", vkMin: "", vkMax: "", marginMin: "", marginMax: "" };
+const cfDefault = () => JSON.parse(JSON.stringify(CAT_FILTER));
+UI.cf = cfDefault();
 UI.cfOpen = false;
-function fnum(v) { if (v === "" || v === undefined) return null; try { return parseMoney(v); } catch (e) { return null; } }
-/* Doppel-Schieberegler von 0 bis zum höchsten Preis. Rechter Regler am Anschlag = unbegrenzt. */
-const usd0 = v => "$" + new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(v);
-function rangeTop(values) {
-  const max = Math.max(0, ...values);
-  if (!max) return { top: 1000, step: 10 };
-  const step = Math.max(1, Math.pow(10, Math.floor(Math.log10(max / 100))));
-  return { top: Math.ceil(max / step) * step, step };
+UI.cfDrop = null;                           // geöffnete Auswahlliste
+UI.cfDropQ = {};                            // Suchtext je Auswahlliste
+function fnum(v) { if (v === "" || v === undefined || v === null) return null; try { return parseMoney(v); } catch (e) { return null; } }
+function catFilterCount() {
+  const norm = v => JSON.stringify(Array.isArray(v) ? [...v].sort() : String(v ?? ""));
+  return Object.keys(CAT_FILTER).filter(k => !/Max$/.test(k)).filter(k => {
+    const base = k.replace(/Min$/, "");
+    return k.endsWith("Min") ? (norm(UI.cf[k]) !== norm("") || norm(UI.cf[base + "Max"]) !== norm("")) : norm(UI.cf[k]) !== norm(CAT_FILTER[k]);
+  }).length;
 }
-function dualRange(name, label, values, min, max) {
-  const { top, step } = rangeTop(values);
-  const lo = Math.min(fnum(min) ?? 0, top), hi = Math.min(fnum(max) ?? top, top);
-  return `<fieldset class="range dual" data-range="${name}" data-top="${top}"><legend>${label}</legend>
-    <div class="dualVals"><span id="dv_${name}Lo">${usd0(lo)}</span><span id="dv_${name}Hi">${hi >= top ? usd0(top) + " (max.)" : usd0(hi)}</span></div>
-    <div class="dualTrack"><div class="dualFill" id="df_${name}" style="left:${lo / top * 100}%;right:${100 - hi / top * 100}%"></div>
-      <input type="range" id="dr_${name}Min" min="0" max="${top}" step="${step}" value="${lo}" aria-label="${label} von">
-      <input type="range" id="dr_${name}Max" min="0" max="${top}" step="${step}" value="${hi}" aria-label="${label} bis"></div></fieldset>`;
+
+/* Doppel-Schieberegler. Geld: von 0 bis zum höchsten Preis. Prozent: vom kleinsten (höchstens 0) bis zum größten Wert. */
+const usd0 = v => "$" + new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(v);
+const pct1 = v => (Math.round(v * 10) / 10).toFixed(1).replace(".", ",") + " %";
+const RANGE_FMT = { usd: usd0, pct: pct1 };
+function rangeBounds(values, kind) {
+  if (kind === "pct") {
+    const lo = Math.min(0, Math.floor(Math.min(0, ...values)));
+    let hi = Math.ceil(Math.max(0, ...values)); if (hi <= lo) hi = lo + 1;
+    return { bottom: lo, top: hi, step: 0.1 };
+  }
+  const max = Math.max(0, ...values);
+  if (!max) return { bottom: 0, top: 1000, step: 10 };
+  const step = Math.max(1, Math.pow(10, Math.floor(Math.log10(max / 100))));
+  return { bottom: 0, top: Math.ceil(max / step) * step, step };
+}
+function dualRange(name, label, values, min, max, kind = "usd") {
+  const { bottom, top, step } = rangeBounds(values, kind), fmt = RANGE_FMT[kind];
+  const clamp = v => Math.min(top, Math.max(bottom, v));
+  const lo = clamp(fnum(min) ?? bottom), hi = clamp(fnum(max) ?? top), pos = v => (v - bottom) / (top - bottom) * 100;
+  return `<fieldset class="range dual" data-range="${name}" data-top="${top}" data-bottom="${bottom}" data-kind="${kind}"><legend>${label}</legend>
+    <div class="dualVals"><span id="dv_${name}Lo">${fmt(lo)}${lo <= bottom && kind === "pct" && bottom < 0 ? " (min.)" : ""}</span><span id="dv_${name}Hi">${fmt(hi)}${hi >= top ? " (max.)" : ""}</span></div>
+    <div class="dualTrack"><div class="dualFill" id="df_${name}" style="left:${pos(lo)}%;right:${100 - pos(hi)}%"></div>
+      <input type="range" id="dr_${name}Min" min="${bottom}" max="${top}" step="${step}" value="${lo}" aria-label="${label} von">
+      <input type="range" id="dr_${name}Max" min="${bottom}" max="${top}" step="${step}" value="${hi}" aria-label="${label} bis"></div></fieldset>`;
 }
 /* Beim Ziehen nur Anzeige aktualisieren, beim Loslassen filtern */
 function dualRangeInput(el, apply) {
-  const box = el.closest(".dual"), name = box.dataset.range, top = +box.dataset.top;
-  const a = $("#dr_" + name + "Min"), b = $("#dr_" + name + "Max");
+  const box = el.closest(".dual"), name = box.dataset.range, top = +box.dataset.top, bottom = +box.dataset.bottom, kind = box.dataset.kind;
+  const fmt = RANGE_FMT[kind], a = $("#dr_" + name + "Min"), b = $("#dr_" + name + "Max");
   let lo = +a.value, hi = +b.value;
   if (lo > hi) { if (el === a) { lo = hi; a.value = lo; } else { hi = lo; b.value = hi; } }
-  $("#dv_" + name + "Lo").textContent = usd0(lo);
-  $("#dv_" + name + "Hi").textContent = hi >= top ? usd0(top) + " (max.)" : usd0(hi);
-  const fill = $("#df_" + name); fill.style.left = lo / top * 100 + "%"; fill.style.right = 100 - hi / top * 100 + "%";
+  const pos = v => (v - bottom) / (top - bottom) * 100;
+  $("#dv_" + name + "Lo").textContent = fmt(lo) + (lo <= bottom && kind === "pct" && bottom < 0 ? " (min.)" : "");
+  $("#dv_" + name + "Hi").textContent = fmt(hi) + (hi >= top ? " (max.)" : "");
+  const fill = $("#df_" + name); fill.style.left = pos(lo) + "%"; fill.style.right = 100 - pos(hi) + "%";
   if (apply) {
-    UI.cf[name + "Min"] = lo > 0 ? lo : "";
+    UI.cf[name + "Min"] = lo > bottom ? lo : "";
     UI.cf[name + "Max"] = hi < top ? hi : "";
     render();
   }
 }
-function catFilterCount() { return Object.entries(CAT_FILTER).filter(([k, v]) => String(UI.cf[k] ?? "") !== String(v)).length; }
+
+/* Mehrfachauswahl mit Checkboxen, „Alle auswählen“ / „Keine auswählen“ und – bei langen Listen – Suche */
+function multiSelect(name, label, options, excluded, allText) {
+  const ex = new Set(excluded), chosen = options.filter(o => !ex.has(o[0]));
+  const summary = chosen.length === options.length ? allText : !chosen.length ? "Keine ausgewählt"
+    : chosen.length === 1 ? chosen[0][1] : `${chosen.length} von ${options.length} ausgewählt`;
+  const open = UI.cfDrop === name, q = UI.cfDropQ[name] || "";
+  const panel = open ? `<div class="msPanel" role="listbox" aria-multiselectable="true">
+      <div class="msHead"><button class="btn sm" data-a="msAll" data-ms="${name}">Alle auswählen</button><button class="btn sm" data-a="msNone" data-ms="${name}">Keine auswählen</button></div>
+      ${options.length > 8 ? `<input class="msSearch" id="msq_${name}" type="search" placeholder="Suchen …" value="${esc(q)}" aria-label="${label} durchsuchen">` : ""}
+      <div class="msList" id="msl_${name}">${options.map(([v, l, n]) => `<label class="msItem" data-txt="${esc(String(l).toLowerCase())}" ${q && !String(l).toLowerCase().includes(q.toLowerCase()) ? "hidden" : ""}>
+        <input type="checkbox" class="msChk" data-ms="${name}" value="${esc(v)}" ${ex.has(v) ? "" : "checked"}><span>${esc(l)}</span>${n !== undefined ? `<em>${n}</em>` : ""}</label>`).join("")}</div></div>` : "";
+  const changed = JSON.stringify([...excluded].sort()) !== JSON.stringify([...(CAT_FILTER[MS_KEY[name]] || [])].sort());
+  return `<div class="ms${open ? " open" : ""}${changed ? " limited" : ""}" data-ms="${name}"><span class="msLabel">${label}</span>
+    <button type="button" class="msBtn" data-a="msToggle" data-ms="${name}" aria-expanded="${open}">${esc(summary)}<span aria-hidden="true">▾</span></button>${panel}</div>`;
+}
+const MS_KEY = { make: "exMake", cat: "exCat", status: "exStatus", stock: "exStock" };
+let msOptions = {};                          // zuletzt angezeigte Optionen je Auswahlliste (für „Keine auswählen“)
 
 function katalog() {
   // Bestand je Modell: über die Verknüpfung, sonst über gleichen Hersteller + Modell
@@ -435,39 +475,49 @@ function katalog() {
   S.models.forEach(m => { byName[key(m.make, m.model)] ??= m.id; });
   const inStock = {};
   S.vehicles.filter(v => AVAILABLE.includes(v.status)).forEach(v => { const id = v.modelId && byId("models", v.modelId) ? v.modelId : byName[key(v.make, v.model)]; if (id) inStock[id] = (inStock[id] || 0) + 1; });
-  const f = UI.cf, ekMin = fnum(f.ekMin), ekMax = fnum(f.ekMax), vkMin = fnum(f.vkMin), vkMax = fnum(f.vkMax), mMin = fnum(f.marginMin);
-  const pct = m => m.vk ? (m.vk - m.ek) / m.vk * 100 : 0;
+  const f = UI.cf, pct = m => m.vk ? (m.vk - m.ek) / m.vk * 100 : 0;
+  const r = { ek: [fnum(f.ekMin), fnum(f.ekMax)], vk: [fnum(f.vkMin), fnum(f.vkMax)], mg: [fnum(f.marginMin), fnum(f.marginMax)] };
+  const inR = (v, [lo, hi]) => (lo === null || v >= lo - 1e-9) && (hi === null || v <= hi + 1e-9);
+  const ex = { make: new Set(f.exMake), cat: new Set(f.exCat), status: new Set(f.exStatus), stock: new Set(f.exStock) };
   const list = S.models.filter(m => match([m.nr, m.make, m.model, m.cat].join(" "))
-    && (!f.make || m.make === f.make) && (!f.cat || m.cat === f.cat)
-    && (ekMin === null || m.ek >= ekMin) && (ekMax === null || m.ek <= ekMax)
-    && (vkMin === null || m.vk >= vkMin) && (vkMax === null || m.vk <= vkMax)
-    && (mMin === null || pct(m) >= mMin)
-    && (f.status === "alle" || (f.status === "aktiv") === m.active)
-    && (!f.stock || (f.stock === "ja") === !!inStock[m.id]))
-    .sort((a, b) => (a.model + a.make).localeCompare(b.model + b.make));
+    && !ex.make.has(m.make) && !ex.cat.has(m.cat || "")
+    && !ex.status.has(m.active ? "aktiv" : "inaktiv") && !ex.stock.has(inStock[m.id] ? "ja" : "nein")
+    && inR(m.ek, r.ek) && inR(m.vk, r.vk) && inR(pct(m), r.mg))
+    .sort((a, b) => collator.compare(a.model, b.model) || collator.compare(a.make, b.make));
   const canOrder = allowed("bestellungen");
-  const makes = [...new Set(S.models.map(m => m.make))].sort((a, b) => a.localeCompare(b));
-  const cats = [...new Set(S.models.map(m => m.cat).filter(Boolean).concat(CATS))].sort((a, b) => a.localeCompare(b));
+  const count = (fn) => S.models.reduce((acc, m) => { const k = fn(m); acc[k] = (acc[k] || 0) + 1; return acc; }, {});
+  const cMake = count(m => m.make), cCat = count(m => m.cat || ""), cStatus = count(m => m.active ? "aktiv" : "inaktiv"), cStock = count(m => inStock[m.id] ? "ja" : "nein");
+  msOptions = {
+    make: Object.keys(cMake).sort(collator.compare).map(x => [x, x, cMake[x]]),
+    cat: Object.keys(cCat).sort((a, b) => (a === "") - (b === "") || collator.compare(a, b)).map(x => [x, x || "(ohne Klasse)", cCat[x]]),
+    status: [["aktiv", "Aktiv", cStatus.aktiv || 0], ["inaktiv", "Inaktiv", cStatus.inaktiv || 0]],
+    stock: [["ja", "Im Bestand (mind. 1)", cStock.ja || 0], ["nein", "Nicht im Bestand", cStock.nein || 0]],
+  };
   const n = catFilterCount();
-  const sel = (id, label, options, val) => `<label>${label}<select id="${id}" data-cf>${options.map(([v, l]) => `<option value="${esc(v)}" ${String(v) === String(val) ? "selected" : ""}>${esc(l)}</option>`).join("")}</select></label>`;
-  const inp = (id, label, val, hint) => `<label>${label}<input id="${id}" data-cf inputmode="decimal" value="${esc(val)}" placeholder="${hint}"></label>`;
   const panel = UI.cfOpen ? `<div class="filters">
-      ${sel("cf_make", "Hersteller", [["", "Alle Hersteller"], ...makes.map(x => [x, x])], f.make)}
-      ${sel("cf_cat", "Klasse", [["", "Alle Klassen"], ...cats.map(x => [x, x])], f.cat)}
-      ${sel("cf_status", "Status", [["aktiv", "Nur aktive"], ["alle", "Aktive und inaktive"], ["inaktiv", "Nur inaktive"]], f.status)}
-      ${sel("cf_stock", "Im Bestand", [["", "Egal"], ["ja", "Mindestens 1 im Bestand"], ["nein", "Nicht im Bestand"]], f.stock)}
+      ${multiSelect("make", "Hersteller", msOptions.make, f.exMake, "Alle Hersteller")}
+      ${multiSelect("cat", "Klasse", msOptions.cat, f.exCat, "Alle Klassen")}
+      ${multiSelect("status", "Status", msOptions.status, f.exStatus, "Aktive und inaktive")}
+      ${multiSelect("stock", "Im Bestand", msOptions.stock, f.exStock, "Egal")}
       ${dualRange("ek", "Einkaufspreis (EK)", S.models.map(m => m.ek), f.ekMin, f.ekMax)}
       ${dualRange("vk", "Verkaufspreis (VK)", S.models.map(m => m.vk), f.vkMin, f.vkMax)}
-      ${inp("cf_marginMin", "Marge mindestens (%)", f.marginMin, "z. B. 20")}
-      <div class="fend">${btn("cfReset", "Filter zurücksetzen")}</div></div>` : "";
+      ${dualRange("margin", "Marge (%)", S.models.map(pct), f.marginMin, f.marginMax, "pct")}
+      <div class="fend"><div class="hits" aria-live="polite"><b>${list.length}</b> ${list.length === 1 ? "Treffer" : "Treffer"} <span>von ${S.models.length} Modellen</span></div>${btn("cfReset", "Filter zurücksetzen")}</div></div>` : "";
   return head("Stammdaten", "Fahrzeugkatalog", "Modelle mit Standard-Einkaufs- und Verkaufspreis. Grundlage für Bestellungen und neue Fahrzeuge.") +
     `<div class="bar">${searchBox("Modell, Hersteller, Klasse …")}<button class="btn ${n ? "on" : ""}" data-a="cfToggle" aria-expanded="${UI.cfOpen}">Filter${n ? ` · ${n} aktiv` : ""} ${UI.cfOpen ? "▴" : "▾"}</button>
+    <span class="hitsInline">${list.length} Treffer</span>
     <span class="grow"></span>${btn("mNew", "Neues Modell", "primary")}${btn("mImport", "CSV-Import")}</div>${panel}` +
     tbl([["Nr."], ["Modell"], ["Hersteller"], ["Klasse", 0, 1], ["EK", 1], ["VK", 1], ["Marge", 1], ["Marge %", 1], ["Im Bestand", 1], ["Aktiv"]],
       list.map(m => ({ id: m.id, cells: [m.nr, esc(m.model), esc(m.make), esc(m.cat), num(m.ek), num(m.vk), num(m.vk - m.ek), m.vk ? pct(m).toFixed(1).replace(".", ",") + " %" : "–", inStock[m.id] || 0, m.active ? "ja" : "nein"] })),
       S.models.length ? "Kein Modell passt zu den Filtern." : "Noch keine Modelle. Lege ein Modell an oder importiere deine Tabelle als CSV-Datei.",
       id => (canOrder && byId("models", id).active ? rb("mOrderRow", "Bestellen", "gold") : "") + rb("mEdit", "Bearbeiten") + rbAdmin()) +
     `<div class="foot">${list.length} von ${S.models.length} Modell(en)${list.length ? ` · EK ${money(Math.min(...list.map(m => m.ek)))} bis ${money(Math.max(...list.map(m => m.ek)))}` : ""}</div>`;
+}
+/* Auswahlliste neu zeichnen und dabei Bildlaufposition der Liste behalten */
+function renderKeepMs() {
+  const name = UI.cfDrop, list = name && $("#msl_" + name), top = list ? list.scrollTop : 0;
+  render();
+  const l2 = name && $("#msl_" + name); if (l2) l2.scrollTop = top;
 }
 
 /* Firmendaten */
@@ -951,8 +1001,11 @@ const ACTIONS = {
   mEdit: () => { const m = selected("models", "ein Modell"); m && modelDialog(m); },
   mOrderRow: () => { const m = selected("models", "ein Modell"); m && orderDialog(null, { modelId: m.id }); },
   cDel: () => { const c = selected("customers", "einen Kunden"); c && ask("Kunde löschen", `${esc(c.name)} löschen? Hat der Kunde schon Vorgänge, wird er nur deaktiviert.`, "Löschen", async () => done(await api("deleteCustomer", { id: c.id }))); },
-  cfToggle: () => { UI.cfOpen = !UI.cfOpen; render(); if (UI.cfOpen) $("#cf_make")?.focus(); },
-  cfReset: () => { UI.cf = { ...CAT_FILTER }; render(); },
+  cfToggle: () => { UI.cfOpen = !UI.cfOpen; UI.cfDrop = null; render(); },
+  cfReset: () => { UI.cf = cfDefault(); UI.cfDrop = null; UI.cfDropQ = {}; delete UI.sort["katalog:0"]; render(); },   // auch Sortierung: Modell A–Z
+  msToggle: el => { UI.cfDrop = UI.cfDrop === el.dataset.ms ? null : el.dataset.ms; render(); $("#msq_" + UI.cfDrop)?.focus(); },
+  msAll: el => { UI.cf[MS_KEY[el.dataset.ms]] = []; renderKeepMs(); },
+  msNone: el => { UI.cf[MS_KEY[el.dataset.ms]] = (msOptions[el.dataset.ms] || []).map(o => o[0]); renderKeepMs(); },
   mImport: importDialog,
   aNew: () => offerDialog(null),
   aEdit: () => { const o = selected("offers", "ein Angebot"); if (!o) return; if (o.status === "bestellt") return toast("Das Angebot ist bereits bestellt und kann nicht mehr geändert werden."); offerDialog(o); },
@@ -969,6 +1022,7 @@ const DOUBLE = { bestand: "vEdit", ausstellung: "sMove", angebote: "aEdit", best
 async function act(fn) { try { const r = await fn(); render(); r?.message && toast(r.message); } catch (e) { toast(e.message); } }
 
 document.addEventListener("click", e => {
+  if (UI.cfDrop && !e.target.closest(".ms")) { UI.cfDrop = null; render(); if (!e.target.closest("[data-a], th.sortable")) return; }
   const th = e.target.closest("#main th.sortable");
   if (th) {                                 // Spalte sortieren: aufsteigend, dann absteigend
     const key = th.closest(".tablewrap").dataset.tkey, col = +th.dataset.col, cur = UI.sort[key];
@@ -987,18 +1041,26 @@ document.addEventListener("click", e => {
   if (tr) { UI.sel[UI.view] = tr.dataset.id; document.querySelectorAll("#main tbody tr.sel").forEach(x => x.classList.remove("sel")); tr.classList.add("sel"); }
 });
 document.addEventListener("dblclick", e => { if (!e.target.closest("button, select") && e.target.closest("#main tbody tr[data-id]") && DOUBLE[UI.view]) ACTIONS[DOUBLE[UI.view]](); });
-document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#ov") && $("#ov [data-a=close]")) close(); });
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && UI.cfDrop && !$("#ov")) { const n = UI.cfDrop; UI.cfDrop = null; render(); $(`.msBtn[data-ms="${n}"]`)?.focus(); return; }
+  if (e.key === "Escape" && $("#ov") && $("#ov [data-a=close]")) close();
+});
 document.addEventListener("input", e => {
   if (e.target.id === "q") { UI.q[UI.view] = e.target.value; const pos = e.target.selectionStart; render(); const q = $("#q"); q.focus(); q.setSelectionRange(pos, pos); }
   if (e.target.matches(".dual input[type=range]")) { dualRangeInput(e.target, false); return; }
-  if (e.target.matches("[data-cf]")) {           // Katalogfilter: sofort anwenden, Fokus behalten
-    const id = e.target.id, isText = e.target.tagName === "INPUT", pos = isText ? e.target.selectionStart : null;
-    UI.cf[id.slice(3)] = e.target.value; render();
-    const el = document.getElementById(id); if (el) { el.focus(); if (isText) el.setSelectionRange(pos, pos); }
+  if (e.target.matches(".msSearch")) {        // nur sichtbare Einträge filtern, ohne neu zu zeichnen
+    const name = e.target.id.slice(4), q = e.target.value.toLowerCase(); UI.cfDropQ[name] = e.target.value;
+    document.querySelectorAll("#msl_" + name + " .msItem").forEach(it => { it.hidden = !!q && !it.dataset.txt.includes(q); });
+    return;
   }
 });
 document.addEventListener("change", e => {
   const t = e.target;
+  if (t.matches(".msChk")) {
+    const k = MS_KEY[t.dataset.ms], set = new Set(UI.cf[k]);
+    t.checked ? set.delete(t.value) : set.add(t.value);
+    UI.cf[k] = [...set]; renderKeepMs(); return;
+  }
   if (t.matches(".dual input[type=range]")) { const id = t.id; dualRangeInput(t, true); document.getElementById(id)?.focus(); return; }
   if (t.id === "fStatus") { UI.filter.bestand = t.value; render(); }
   if (t.id === "fCond") { UI.filter.cond = t.value; render(); }
