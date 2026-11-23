@@ -40,6 +40,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.middleware.sessions import SessionMiddleware
 
 from .. import __version__, db, models as m
+from . import beta
 from ..services import BusinessError, auth, context, dealer, maintenance, get_setting, masterdata, set_setting, set_user
 
 log = logging.getLogger("erp.web")
@@ -127,6 +128,7 @@ def state(s, user: m.User) -> dict:
     vehicles = s.scalars(select(m.Vehicle)).all()
     data = {
         "version": f"{__version__} · {asset_version()[:7]}",
+        "beta": beta.info(),
         "me": me(s, user),
         "settings": {"company": get_setting(s, "company_name"), "seller": user.full_name or user.username,
                      "logoVersion": logo_version(s), "customLogo": bool(get_setting(s, "logo_data"))},
@@ -590,7 +592,11 @@ def create_app(url: str | None = None) -> FastAPI:
         yield
 
     def _startup():
-        db.connect(url or database_url())
+        if beta.is_beta():                       # Testumgebung: frische Kopie der Live-Daten
+            db.connect(beta.target_url(url, database_url()))
+            beta.clone(db.engine())
+        else:
+            db.connect(url or database_url())
         db.init_schema()
         with db.session_scope() as s:            # Spielbetrieb: Fahrzeuge werden immer ohne Steuer gerechnet
             set_setting(s, "vehicle_vat_rate", "0")
@@ -689,6 +695,25 @@ def create_app(url: str | None = None) -> FastAPI:
             return state(s, user)
         return with_session(do)
 
+    @app.post("/api/beta/reload")
+    def beta_reload(request: Request):
+        """Beta: Kopie der Live-Daten neu laden (nur Administratoren)."""
+        if not beta.is_beta():
+            return _error(404, "Nur in der Testumgebung verfügbar")
+        user = with_session(lambda s: current_user(s, request))
+        if not isinstance(user, m.User) or not user.is_admin:
+            return _error(403, "Nur Administratoren dürfen die Testdaten neu laden")
+        try:
+            rows = beta.clone(db.engine())
+            db.init_schema()
+            with db.session_scope() as s:
+                set_setting(s, "vehicle_vat_rate", "0")
+                dealer.link_vehicles_to_catalog(s)
+        except Exception:                                     # noqa: BLE001
+            log.exception("Beta-Daten konnten nicht geladen werden")
+            return _error(503, "Die Live-Daten konnten nicht geladen werden. Bitte die Variable ERP_BETA_SOURCE_URL prüfen.")
+        return {"message": f"Live-Daten neu geladen ({rows} Datensätze). Bitte neu anmelden, falls sich Zugänge geändert haben."}
+
     @app.post("/api/password")
     async def password(request: Request):
         data = json_body(request, await request.body())
@@ -736,7 +761,12 @@ def create_app(url: str | None = None) -> FastAPI:
     @app.get("/")
     def index():
         def do(s):
-            return index_html().replace("LOGOVERSION", logo_version(s))
+            html = index_html().replace("LOGOVERSION", logo_version(s))
+            if beta.is_beta():                   # deutlicher Hinweis auf jeder Seite, auch beim Anmelden
+                html = html.replace("<body>", '<body class="is-beta"><div class="betaRibbon" role="note">BETA · '
+                                    'Testumgebung mit einer Kopie der Live-Daten – Änderungen werden nicht übernommen</div>', 1)
+                html = html.replace("<title>", "<title>BETA · ", 1)
+            return html
         html = with_session(do)
         if not isinstance(html, str):       # Datenbank nicht erreichbar: Seite trotzdem ausliefern
             html = index_html().replace("LOGOVERSION", "standard")

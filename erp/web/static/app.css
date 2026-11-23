@@ -321,3 +321,11 @@ fieldset.checks small { display: block; color: var(--faint); font-size: 11px; }
 .due { color: var(--pos); font-weight: 600; }
 .due::before { content: "● "; font-size: 9px; vertical-align: 2px; }
 .loginVer { margin: 4px 0 0; text-align: center; color: var(--faint); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+
+/* Beta-Testumgebung */
+.betaRibbon { position: sticky; top: 0; z-index: 40; background: repeating-linear-gradient(135deg, #3a2a08 0 14px, #2a1f07 14px 28px);
+  color: #ffd36b; border-bottom: 1px solid #a07a25; text-align: center; font-size: 12.5px; font-weight: 700; letter-spacing: .06em;
+  padding: 6px max(16px, env(safe-area-inset-right, 0px)) 6px max(16px, env(safe-area-inset-left, 0px)); }
+body.is-beta .side { top: 31px; height: calc(100vh - 31px); }
+.card.betaCard { border-color: #a07a25; border-top: 2px solid #ffd36b; }
+.card.betaCard b { color: #ffd36b; }

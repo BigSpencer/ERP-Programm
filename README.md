@@ -71,6 +71,12 @@ Erste Anmeldung mit `admin` / `admin` (bzw. `ERP_ADMIN_PASSWORD`). Solange das S
 aktiv ist, lässt die Web-Version nichts anderes zu als den Passwortwechsel. Danach unter
 *System → Benutzer* die Mitarbeiter mit ihren Rollen anlegen.
 
+**Beta-/Testumgebung:** Ein zweiter Render-Web-Service mit der Umgebungsvariable
+`ERP_BETA_SOURCE_URL` (= *Internal Database URL* der Live-Datenbank) und ohne eigene
+`ERP_DATABASE_URL` lädt beim Start eine Kopie der Live-Daten in eine temporäre Datenbank.
+Die Live-Datenbank wird nur lesend geöffnet; Änderungen in der Beta gehen bei jedem Neustart
+verloren. Admins können die Kopie unter *Firmendaten* jederzeit neu laden.
+
 **Lokal ausprobieren:**
 
 ```bash
@@ -154,7 +160,7 @@ ausführen (Netzfreigabe in `pg_hba.conf`/`postgresql.conf` beachten, siehe Date
 Der GitHub-Actions-Workflow baut bei jedem Push fertige Pakete
 (Actions → *Tests & Installer* → Artefakte):
 
-* Windows: `ERPDesk-Setup-2.1.1.exe` (Installer mit Startmenü- und Desktop-Verknüpfung)
+* Windows: `ERPDesk-Setup-2.1.2.exe` (Installer mit Startmenü- und Desktop-Verknüpfung)
 * macOS / Linux: Ordner `ERPDesk/` mit ausführbarer Datei
 
 Selbst bauen:

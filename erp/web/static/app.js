@@ -154,7 +154,7 @@ function renderNav() {
   }
   $("#nav").innerHTML = h;
   setBrand("#brandTop", "#brandSub");
-  document.title = S.settings.company + " · ERP";
+  document.title = (S.beta ? "BETA · " : "") + S.settings.company + " · ERP";
   const logoUrl = "/logo?v=" + encodeURIComponent(S.settings.logoVersion);
   document.querySelectorAll("img.loginLogo, img.sideLogo").forEach(i => { if (!i.src.endsWith(logoUrl)) i.src = logoUrl; });
   const fav = $("#favicon"); if (fav && !fav.href.endsWith(logoUrl)) fav.href = logoUrl;
@@ -561,6 +561,10 @@ function einstellungen() {
       <div class="logoRow"><img class="logoPreview" src="/logo?v=${encodeURIComponent(S.settings.logoVersion)}" alt="Aktuelles Logo">
         <div class="logoBtns"><label class="btn primary fileBtn">Logo hochladen …<input type="file" id="logoFile" accept="image/png,image/jpeg,image/webp" hidden></label>
         ${S.settings.customLogo ? btn("resetLogo", "Standardlogo wiederherstellen") : ""}</div></div></div></div>
+    ${S.beta ? `<div class="settings"><div class="card betaCard"><b>Beta-Testumgebung</b>
+      <p>Diese Seite arbeitet mit einer Kopie der Live-Daten${S.beta.loadedAt ? ` vom ${de(S.beta.loadedAt.slice(0, 10))}, ${S.beta.loadedAt.slice(11, 16)} Uhr` : ""}.
+      Änderungen hier werden nicht in die Live-Daten übernommen. Die Kopie wird bei jedem Neustart der Beta erneuert.</p>
+      <div style="margin-top:12px">${btn("betaReload", "Live-Daten jetzt neu laden")}</div></div></div>` : ""}
     <div class="settings"><div class="card danger-zone">
       <b>Gefahrenbereich: Datenbank bereinigen</b>
       <p>Entfernt alle Fahrzeuge, Kunden, Angebote, Bestellungen, Verkäufe, Ankäufe und Buchungen, zum Beispiel nach einer Testphase oder zum Neustart.
@@ -1120,6 +1124,8 @@ const ACTIONS = {
   resetLogo: () => ask("Standardlogo wiederherstellen", "Das hochgeladene Logo wird entfernt und das mitgelieferte Logo wieder verwendet.", "Wiederherstellen",
     async () => done(await api("resetLogo", {}))),
   wipe: () => wipeDialog(),
+  betaReload: () => ask("Live-Daten neu laden", "Alle Änderungen in der Testumgebung werden verworfen und durch eine frische Kopie der Live-Daten ersetzt.", "Neu laden",
+    async () => { const r = await request("/api/beta/reload", {}); await reload(); return r.message; }),
   uNew: () => adminDialog(null),
   uEdit: () => { const u = selected("users", "einen Admin"); u && adminDialog(u); },
   eNew: () => employeeDialog(null),
