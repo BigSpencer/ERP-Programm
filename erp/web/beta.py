@@ -10,6 +10,7 @@ from __future__ import annotations
 import datetime as dt
 import logging
 import os
+import re
 import tempfile
 from pathlib import Path
 
@@ -23,17 +24,23 @@ _state = {"loaded_at": None, "rows": 0}
 
 
 def source_url() -> str | None:
-    url = os.environ.get("ERP_BETA_SOURCE_URL") or ""
+    url = (os.environ.get("ERP_BETA_SOURCE_URL") or "").strip().strip("\"'").strip()
     if not url:
         return None
     for prefix in ("postgres://", "postgresql://"):
         if url.startswith(prefix):
             return "postgresql+psycopg2://" + url[len(prefix):]
+    if not url.startswith(("postgresql+", "sqlite:", "mysql")):
+        shown = (url.split("://", 1)[0] + "://" if "://" in url else re.match(r"[A-Za-z0-9._-]{0,12}", url).group(0)) + "…"
+        raise RuntimeError(
+            "ERP_BETA_SOURCE_URL ist keine gültige Datenbank-Adresse (beginnt mit „" + shown + "“). Erwartet wird die "
+            "„Internal Database URL“ der Live-Datenbank, z. B. postgresql://benutzer:passwort@host/datenbank – "
+            "ohne Anführungszeichen und Leerzeichen.")
     return url
 
 
 def is_beta() -> bool:
-    return source_url() is not None
+    return bool((os.environ.get("ERP_BETA_SOURCE_URL") or "").strip())
 
 
 def target_url(explicit: str | None, configured: str) -> str:
