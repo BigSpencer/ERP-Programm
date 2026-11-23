@@ -238,3 +238,14 @@ def test_logo_upload_keeps_original_bytes(client):
     assert f"/logo?v={v}" in client.get("/").text
     do(client, "resetLogo", {})
     assert client.get("/api/state").json()["settings"]["logoVersion"] == "standard"
+
+
+def test_delete_customer_and_model_deactivates_when_used(client):
+    mid, cid, vid = _filled(client)
+    r = do(client, "deleteCustomer", {"id": cid})
+    assert "deaktiviert" in r["message"]
+    free = do(client, "saveCustomer", {"name": "Ohne Vorgänge"})["id"]
+    assert "gelöscht" in do(client, "deleteCustomer", {"id": free})["message"]
+    assert "deaktiviert" in do(client, "deleteModel", {"id": mid})["message"]
+    st = client.get("/api/state").json()
+    assert [c["active"] for c in st["customers"]] == [False] and st["models"][0]["active"] is False

@@ -404,6 +404,16 @@ def a_settings(s, b):
     return {"message": "Firmendaten gespeichert"}
 
 
+def a_delete_customer(s, b):
+    res = masterdata.delete(s, "customer", _id(b["id"]))
+    return {"message": f"Kunde {res}"}
+
+
+def a_delete_model(s, b):
+    res = masterdata.delete(s, "vehicle_model", _id(b["id"]))
+    return {"message": f"Modell {res}"}
+
+
 def a_purge(s, b):
     label = maintenance.purge(s, _str(b.get("kind")), _id(b.get("id")))
     return {"message": f"{label} endgültig gelöscht"}
@@ -453,6 +463,8 @@ ACTIONS: dict[str, tuple[str, Callable[[Any, dict], dict]]] = {
     "settings": ("admin", a_settings),
     "saveUser": ("admin", a_save_user),
     "purge": ("admin", a_purge),
+    "deleteCustomer": ("customers", a_delete_customer),
+    "deleteModel": ("vehicle_models", a_delete_model),
     "wipe": ("admin", a_wipe),
 }
 # Der Verkauf braucht auch Fahrzeuge, die Kundenpflege ist in Verkauf/Ankauf nötig

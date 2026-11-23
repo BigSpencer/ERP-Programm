@@ -235,3 +235,23 @@ select.rowStatus.st-angekauft, select.rowStatus.st-verrechnet { color: var(--pos
 .logoBtns { display: flex; flex-wrap: wrap; gap: 8px; }
 .fileBtn { display: inline-flex; align-items: center; }
 .loginLogo, .sideLogo { object-fit: contain; }
+
+/* Feste Tabellenköpfe: nur die Einträge scrollen */
+.tablewrap.mainList { overflow: auto; }
+.tablewrap thead th { position: sticky; top: 0; z-index: 2; box-shadow: inset 0 -1px 0 var(--gold-dark); }
+/* Aktionsspalte mit Zeilenknöpfen */
+th.act, td.act { text-align: right; width: 1%; white-space: nowrap; }
+td.act { padding-block: 4px; }
+td.act .btn.sm + .btn.sm { margin-left: 6px; }
+td .btn.sm { border-color: var(--border-strong); color: var(--text); }
+td .btn.sm:hover { border-color: var(--gold); color: var(--gold-light); background: var(--surface-2); }
+td .btn.sm.gold { border-color: var(--gold-dark); color: var(--gold-light); }
+td .btn.sm.gold:hover { background: var(--gold); color: var(--on-gold); border-color: var(--gold); }
+td .btn.sm.danger:hover { border-color: var(--neg); color: var(--neg); background: transparent; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+/* Aktionsspalte bleibt am rechten Rand sichtbar, auch wenn die Tabelle seitlich scrollt */
+td.act { position: sticky; right: 0; z-index: 1; box-shadow: -10px 0 12px -10px rgba(0, 0, 0, .7); }
+th.act { position: sticky; right: 0; z-index: 3; }
+td.act { background: var(--surface); }
+td .btn.sm { padding: 3px 9px; }
+td.act .btn.sm + .btn.sm { margin-left: 4px; }

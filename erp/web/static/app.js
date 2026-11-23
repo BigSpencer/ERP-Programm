@@ -149,17 +149,30 @@ function render() {
   const views = { cockpit, bestand, ausstellung, angebote, bestellungen, verkauf, ankauf, kunden, katalog, einstellungen, benutzer };
   $("#main").innerHTML = mob + views[UI.view]();
   const q = $("#q"); if (q) q.value = UI.q[UI.view] || "";
+  fitList();
 }
+function fitList() {
+  const w = $("#main .tablewrap.mainList"); if (!w) return;
+  if (innerWidth <= 760) { w.style.maxHeight = ""; return; }
+  w.style.maxHeight = Math.max(220, innerHeight - w.getBoundingClientRect().top - 20) + "px";
+  const excess = document.documentElement.scrollHeight - innerHeight;          // Fußzeile/Abstände nachmessen
+  if (excess > 0) w.style.maxHeight = Math.max(220, parseFloat(w.style.maxHeight) - excess) + "px";
+}
+addEventListener("resize", fitList);
 function head(eyebrow, title, sub) { return `<div class="head"><div><div class="eyebrow">${eyebrow}</div><h1>${title}</h1>${sub ? `<p>${sub}</p>` : ""}</div></div>`; }
 function pill(key, label) { return `<span class="pill ${key}">${esc(label)}</span>`; }
 function match(text) { const q = (UI.q[UI.view] || "").toLowerCase(); return !q || text.toLowerCase().includes(q); }
-function tbl(cols, rows, emptyText) {
-  const th = cols.map(c => `<th class="${c[1] ? "n" : ""}">${c[0]}</th>`).join("");
+/* acts: optionale Funktion id -> Knöpfe für die Aktionsspalte am Zeilenende; main: Hauptliste der Ansicht (feste Kopfzeile, eigener Bildlauf) */
+function tbl(cols, rows, emptyText, acts, main = !!acts) {
+  const th = cols.map(c => `<th class="${c[1] ? "n" : ""}">${c[0]}</th>`).join("") + (acts ? `<th class="act"><span class="sr">Aktionen</span></th>` : "");
   const sel = UI.sel[UI.view];
-  const body = rows.length ? rows.map(r => `<tr data-id="${esc(r.id)}" class="${r.id === sel ? "sel" : ""}">${r.cells.map((v, i) => `<td class="${cols[i][1] ? "n" : ""}${cols[i][2] ? " dim" : ""}">${v}</td>`).join("")}</tr>`).join("")
-    : `<tr><td colspan="${cols.length}" class="empty">${emptyText}</td></tr>`;
-  return `<div class="tablewrap"><table><thead><tr>${th}</tr></thead><tbody>${body}</tbody></table></div>`;
+  const body = rows.length ? rows.map(r => `<tr data-id="${esc(r.id)}" class="${r.id === sel ? "sel" : ""}">${r.cells.map((v, i) => `<td class="${cols[i][1] ? "n" : ""}${cols[i][2] ? " dim" : ""}">${v}</td>`).join("")}${acts ? `<td class="act">${acts(r.id)}</td>` : ""}</tr>`).join("")
+    : `<tr><td colspan="${cols.length + (acts ? 1 : 0)}" class="empty">${emptyText}</td></tr>`;
+  return `<div class="tablewrap${main ? " mainList" : ""}"><table><thead><tr>${th}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
+/* Knöpfe in der Tabellenzeile; ein Klick wählt zugleich die Zeile aus */
+const rb = (action, label, cls = "") => `<button class="btn sm ${cls}" data-a="${action}">${label}</button>`;
+const rbAdmin = () => isAdmin() ? rb("purge", "Endgültig", "danger adminDel") : "";
 const searchBox = ph => `<input id="q" class="search" type="search" placeholder="${ph}" aria-label="Suchen">`;
 const btn = (action, label, cls = "") => `<button class="btn ${cls}" data-a="${action}">${label}</button>`;
 const isAdmin = () => S.me.role === "admin";
@@ -212,12 +225,13 @@ function bestand() {
     `<div class="bar">${searchBox("Fahrzeug, Kennzeichen, FIN …")}
     <select id="fStatus" aria-label="Status">${Object.entries(FILTERS).map(([k, [l]]) => `<option value="${k}" ${UI.filter.bestand === k ? "selected" : ""}>${l}</option>`).join("")}</select>
     <select id="fCond" aria-label="Zustand"><option value="">Neu & gebraucht</option><option value="neu" ${UI.filter.cond === "neu" ? "selected" : ""}>Neu</option><option value="gebraucht" ${UI.filter.cond === "gebraucht" ? "selected" : ""}>Gebraucht</option></select>
-    <span class="grow"></span>${btn("vNew", "Neues Fahrzeug", "primary")}${btn("vEdit", "Bearbeiten")}${btn("vShow", "Ausstellen")}${btn("vRes", "Reservieren")}${btn("vUnres", "Reservierung aufheben")}
-    ${allowed("verkauf") ? btn("vSell", "Verkaufen") : ""}${btn("vRemove", "Ausbuchen", "danger")}${adminDel()}</div>` +
+    <span class="grow"></span>${btn("vNew", "Neues Fahrzeug", "primary")}${btn("vShow", "Ausstellen")}${btn("vRes", "Reservieren")}${btn("vUnres", "Reservierung aufheben")}
+    ${allowed("verkauf") ? btn("vSell", "Verkaufen") : ""}</div>` +
     tbl([["Nr."], ["Fahrzeug"], ["Klasse", 0, 1], ["Zustand"], ["Farbe", 0, 1], ["Kennzeichen"], ["FIN", 0, 1], ["km", 1], ["EK", 1], ["VK", 1], ["Marge", 1], ["Tage", 1], ["Status"], ["Stellplatz / Reserviert für"]],
       list.map(v => ({ id: v.id, cells: [v.nr, esc(vName(v)), esc(v.cat), v.cond === "neu" ? "Neu" : "Gebraucht", esc(v.color), esc(v.plate), esc(v.vin), intf.format(v.km), num(v.ek), num(v.vk), num(v.vk - v.ek),
         AVAILABLE.includes(v.status) ? days(v.inDate) : "–", pill(v.status, STATUS[v.status]), esc(v.status === "reserviert" ? custName(v.resFor) : v.loc)] })),
-      S.vehicles.length ? "Keine Fahrzeuge für diesen Filter" : "Noch keine Fahrzeuge. Lege eins an oder buche den Eingang einer Bestellung.") +
+      S.vehicles.length ? "Keine Fahrzeuge für diesen Filter" : "Noch keine Fahrzeuge. Lege eins an oder buche den Eingang einer Bestellung.",
+      id => rb("vEdit", "Bearbeiten") + (["lager", "ausstellung"].includes(byId("vehicles", id).status) ? rb("vRemove", "Ausbuchen", "danger") : "") + rbAdmin()) +
     `<div class="foot">${list.length} Fahrzeug(e) · Einkaufswert ${money(ek)} · Listenwert ${money(vk)}</div>`;
 }
 
@@ -225,11 +239,11 @@ function bestand() {
 function ausstellung() {
   const list = S.vehicles.filter(v => v.showSince && AVAILABLE.includes(v.status) && match([v.nr, v.make, v.model, v.loc, v.color].join(" "))).sort((a, b) => (a.loc || "~").localeCompare(b.loc || "~"));
   return head("Autohaus", "Ausstellung", "Showroom nach Stellplatz. Ein Stellplatz kann nur mit einem Fahrzeug belegt sein.") +
-    `<div class="bar">${searchBox("Stellplatz, Fahrzeug …")}<span class="grow"></span>${btn("sShow", "Fahrzeug ausstellen", "primary")}${btn("sMove", "Stellplatz ändern")}${btn("sOut", "Aus Ausstellung nehmen")}
-    ${btn("vRes", "Reservieren")}${allowed("verkauf") ? btn("vSell", "Verkaufen") : ""}${adminDel()}</div>` +
+    `<div class="bar">${searchBox("Stellplatz, Fahrzeug …")}<span class="grow"></span>${btn("sShow", "Fahrzeug ausstellen", "primary")}
+    ${btn("vRes", "Reservieren")}${allowed("verkauf") ? btn("vSell", "Verkaufen") : ""}</div>` +
     tbl([["Stellplatz"], ["Nr."], ["Fahrzeug"], ["Klasse", 0, 1], ["Farbe", 0, 1], ["VK", 1], ["Seit", 1], ["Tage", 1], ["Status"], ["Reserviert für"]],
       list.map(v => ({ id: v.id, cells: [esc(v.loc || "–"), v.nr, esc(vName(v)), esc(v.cat), esc(v.color), num(v.vk), de(v.showSince), days(v.showSince), pill(v.status, STATUS[v.status]), esc(custName(v.resFor))] })),
-      "Noch kein Fahrzeug ausgestellt") + `<div class="foot">${list.length} Fahrzeug(e) in der Ausstellung</div>`;
+      "Noch kein Fahrzeug ausgestellt", id => rb("sMove", "Stellplatz") + rb("sOut", "Herausnehmen") + rbAdmin()) + `<div class="foot">${list.length} Fahrzeug(e) in der Ausstellung</div>`;
 }
 
 /* Bestellungen */
@@ -263,13 +277,14 @@ function angebote() {
   const sum = list.filter(o => o.status === "offen").reduce((a, o) => a + o.price, 0);
   return head("Autohaus", "Angebote", "Schritt 1 von 3: Angebot an den Kunden. Zahlt oder zahlt er an, wird über den Status „Bestellt“ daraus eine Bestellung.") +
     `<div class="bar">${searchBox("Angebot, Kunde, Fahrzeug …")}<select id="fOffer" aria-label="Filter">${[["aktiv", "Offene Angebote"], ["bestellt", "Bestellt"], ["abgelehnt", "Abgelehnt"], ["abgelaufen", "Abgelaufen"], ["alle", "Alle Angebote"]].map(([k, l]) => `<option value="${k}" ${f === k ? "selected" : ""}>${l}</option>`).join("")}</select>
-    <span class="grow"></span>${btn("aNew", "Neues Angebot", "primary")}${btn("aEdit", "Bearbeiten")}${btn("aDoc", "Angebot ansehen")}${btn("aDel", "Löschen", "danger")}${adminDel()}</div>` +
+    <span class="grow"></span>${btn("aNew", "Neues Angebot", "primary")}${btn("aDoc", "Angebot ansehen")}</div>` +
     tbl([["Nr."], ["Datum"], ["Kunde"], ["Fahrzeug / Modell"], ["Farbe", 0, 1], ["Preis", 1], ["Gültig bis"], ["Status"], ["Bestellung", 0, 1]],
       list.map(o => { const late = o.status === "offen" && o.validUntil && o.validUntil < today(), ord = orderOfOffer(o);
         return { id: o.id, cells: [o.nr, de(o.date), esc(custName(o.customerId)), esc(offerSubject(o)), esc(o.color), num(o.price),
           `<span class="${late ? "late" : ""}">${de(o.validUntil) || "–"}${late ? " · abgelaufen?" : ""}</span>`,
           statusSelect("offer", o.id, o.status, OFFER_STATUS, offerNext(o)), ord ? ord.nr : ""] }; }),
-      S.offers.length ? "Keine Angebote für diesen Filter" : "Noch keine Angebote. Lege mit „Neues Angebot“ das erste an.") +
+      S.offers.length ? "Keine Angebote für diesen Filter" : "Noch keine Angebote. Lege mit „Neues Angebot“ das erste an.",
+      id => (byId("offers", id).status !== "bestellt" ? rb("aEdit", "Bearbeiten") : "") + rb("aDel", "Löschen", "danger") + rbAdmin()) +
     `<div class="foot">${list.length} Angebot(e)${sum ? ` · offenes Volumen ${money(sum)}` : ""}</div>`;
 }
 
@@ -280,13 +295,13 @@ function bestellungen() {
   const offerNr = id => S.offers.find(x => x.orderId === id)?.nr || "";
   return head("Autohaus", "Bestellungen", "Schritt 2 von 3: Bestellung mit Anzahlung. Status „Eingetroffen“ bucht das Fahrzeug ein, „Ausgeliefert“ erstellt mit der Übergabe den Verkauf.") +
     `<div class="bar">${searchBox("Bestellung, Modell, Kunde …")}<label style="display:flex;gap:6px;align-items:center"><input id="fOpen" type="checkbox" ${UI.filter.openOnly ? "checked" : ""}> nur offene</label>
-    <span class="grow"></span>${btn("oNew", "Neue Bestellung", "primary")}${btn("oEdit", "Bearbeiten")}${btn("oDoc", "Bestellbestätigung")}${btn("oDel", "Löschen", "danger")}${adminDel()}</div>` +
+    <span class="grow"></span>${btn("oNew", "Neue Bestellung", "primary")}${btn("oDoc", "Bestellbestätigung")}</div>` +
     tbl([["Nr."], ["Datum"], ["Modell"], ["Farbe", 0, 1], ["Für Kunde"], ["VK", 1], ["Anzahlung", 1], ["Offen", 1], ["Liefertermin"], ["Status"], ["Fahrzeug", 0, 1], ["Angebot", 0, 1]],
       list.map(o => { const m = byId("models", o.modelId), late = o.status === "bestellt" && o.expected && o.expected < today();
         return { id: o.id, cells: [o.nr, de(o.date), esc(m ? `${m.model} – ${m.make}` : ""), esc(o.color), esc(o.customerId ? custName(o.customerId) : "– Lager –"), num(o.vk), num(o.deposit), num(o.vk - o.deposit),
           `<span class="${late ? "late" : ""}">${de(o.expected) || "–"}${late ? " · überfällig" : ""}</span>`,
           statusSelect("order", o.id, o.status, ORDER_STATUS, orderNext(o)), o.vehicleId ? byId("vehicles", o.vehicleId)?.nr || "" : "", offerNr(o.id)] }; }),
-      "Keine Bestellungen");
+      "Keine Bestellungen", id => (byId("orders", id).status === "bestellt" ? rb("oEdit", "Bearbeiten") : "") + rb("oDel", "Löschen", "danger") + rbAdmin());
 }
 
 /* Verkauf */
@@ -298,10 +313,10 @@ function verkauf() {
   const bySeller = {}; ok.forEach(s => { const b = bySeller[s.seller] ||= [0, 0, 0]; b[0]++; b[1] += s.price; b[2] += s.price - s.ek; });
   return head("Autohaus", "Verkauf", "Schritt 3 von 3: Übergabe mit Restzahlung. Entsteht aus einer ausgelieferten Bestellung oder direkt über „Neuer Verkauf“.") +
     `<div class="bar">${searchBox("Vertrag, Käufer, Fahrzeug …")}<select id="fYear" aria-label="Jahr"><option value="">Alle Jahre</option>${years.map(x => `<option ${x === y ? "selected" : ""}>${x}</option>`).join("")}</select>
-    <span class="grow"></span>${btn("vSell", "Neuer Verkauf", "primary")}${btn("kDoc", "Kaufvertrag ansehen")}${btn("kDel", "Löschen", "danger")}${adminDel()}</div>` +
+    <span class="grow"></span>${btn("vSell", "Neuer Verkauf", "primary")}</div>` +
     tbl([["Nr."], ["Datum"], ["Fahrzeug"], ["Käufer"], ["Kaufpreis", 1], ["Anzahlung", 1], ["Inzahlungn.", 1], ["Restzahlung", 1], ["EK", 1], ["Rohertrag", 1], ["Zahlung", 0, 1], ["Verkäufer", 0, 1], ["Status"], ["Bestellung", 0, 1]],
       list.map(s => ({ id: s.id, cells: [s.nr, de(s.date), esc(vLabel(byId("vehicles", s.vehicleId))), esc(custName(s.customerId)), num(s.price), s.deposit ? num(s.deposit) : "–", s.tradeValue ? num(s.tradeValue) : "–", num(s.price - s.tradeValue - s.deposit), num(s.ek),
-        num(s.price - s.ek), PAY[s.pay], esc(s.seller), statusSelect("sale", s.id, s.status, SALE_STATUS, saleNext(s)), s.orderId ? byId("orders", s.orderId)?.nr || "" : ""] })), "Keine Verkäufe im gewählten Zeitraum") +
+        num(s.price - s.ek), PAY[s.pay], esc(s.seller), statusSelect("sale", s.id, s.status, SALE_STATUS, saleNext(s)), s.orderId ? byId("orders", s.orderId)?.nr || "" : ""] })), "Keine Verkäufe im gewählten Zeitraum", id => rb("kDoc", "Vertrag") + rb("kDel", "Löschen", "danger") + rbAdmin()) +
     `<div class="foot">${ok.length} Verkauf/Verkäufe · Umsatz ${money(tot)} · Rohertrag ${money(mg)}</div>
     <div style="margin-top:18px"><h3 class="eyebrow">Nach Verkäufer</h3>${tbl([["Verkäufer"], ["Anzahl", 1], ["Umsatz", 1], ["Rohertrag", 1]],
       Object.entries(bySeller).sort((a, b) => b[1][1] - a[1][1]).map(([n, [c, t, m]]) => ({ id: "s-" + n, cells: [esc(n), c, num(t), num(m)] })), "Keine Daten")}</div>`;
@@ -320,12 +335,12 @@ function ankauf() {
   const open = S.purchases.filter(p => p.status === "inzahlungnahme");
   return head("Autohaus", "Gebrauchtwagen-Ankauf", "Ankauf: Fahrzeug wird sofort bezahlt und steht im Bestand. Inzahlungnahme: Fahrzeug wird vorgemerkt und bei der Übergabe eines verkauften Fahrzeugs verrechnet.") +
     `<div class="bar">${searchBox("Ankauf, Verkäufer, Kennzeichen …")}<select id="fPurchase" aria-label="Status"><option value="">Alle</option>${Object.entries(PURCHASE_STATUS).map(([k, l]) => `<option value="${k}" ${f === k ? "selected" : ""}>${l}</option>`).join("")}</select>
-    <span class="grow"></span>${btn("pNew", "Neuer Ankauf", "primary")}${btn("pDoc", "Vertrag ansehen")}${adminDel()}</div>` +
+    <span class="grow"></span>${btn("pNew", "Neuer Ankauf", "primary")}</div>` +
     tbl([["Nr."], ["Datum"], ["Fahrzeug"], ["Kennzeichen"], ["km", 1], ["Kunde"], ["Preis / Anrechnung", 1], ["Geplanter VK", 1], ["Status"], ["Fahrzeugstatus"], ["Verrechnet mit", 0, 1]],
       list.map(p => { const v = byId("vehicles", p.vehicleId), sale = p.saleId && byId("sales", p.saleId);
         return { id: p.id, cells: [p.nr, de(p.date), esc(v.nr + " " + vName(v)), esc(v.plate), intf.format(v.km), esc(custName(p.customerId)), num(p.price), num(v.vk),
           statusSelect("purchase", p.id, p.status, PURCHASE_STATUS, purchaseNext(p)), pill(v.status, STATUS[v.status]), sale ? sale.nr : ""] }; }),
-      S.purchases.length ? "Keine Einträge für diesen Filter" : "Noch keine Ankäufe") +
+      S.purchases.length ? "Keine Einträge für diesen Filter" : "Noch keine Ankäufe", id => rb("pDoc", "Vertrag") + rbAdmin()) +
     `<div class="foot">${list.length} Eintrag/Einträge${open.length ? ` · ${open.length} offene Inzahlungnahme(n) über ${money(open.reduce((a, p) => a + p.price, 0))}` : ""}</div>`;
 }
 
@@ -333,10 +348,10 @@ function ankauf() {
 function kunden() {
   const list = S.customers.filter(c => match([c.nr, c.name, c.phone, c.email].join(" "))).sort((a, b) => a.name.localeCompare(b.name));
   return head("Stammdaten", "Kunden", "Kundenkartei mit vollständiger Fahrzeughistorie") +
-    `<div class="bar">${searchBox("Name, Telefon …")}<span class="grow"></span>${btn("cNew", "Neuer Kunde", "primary")}${btn("cEdit", "Bearbeiten")}${btn("cHist", "Fahrzeughistorie")}${adminDel()}</div>` +
+    `<div class="bar">${searchBox("Name, Telefon …")}<span class="grow"></span>${btn("cNew", "Neuer Kunde", "primary")}</div>` +
     tbl([["Nr."], ["Name"], ["Telefon"], ["E-Mail", 0, 1], ["Käufe", 1], ["Umsatz", 1], ["Notizen", 0, 1]],
       list.map(c => { const s = S.sales.filter(x => x.customerId === c.id && x.status === "ok"); return { id: c.id, cells: [c.nr, esc(c.name), esc(c.phone), esc(c.email), s.length, num(s.reduce((a, x) => a + x.price, 0)), esc(c.notes)] }; }),
-      "Noch keine Kunden");
+      "Noch keine Kunden", id => rb("cEdit", "Bearbeiten") + rb("cHist", "Historie") + rb("cDel", "Löschen", "danger") + rbAdmin());
 }
 
 /* Katalog */
@@ -375,11 +390,11 @@ function katalog() {
       <div class="fend">${btn("cfReset", "Filter zurücksetzen")}</div></div>` : "";
   return head("Stammdaten", "Fahrzeugkatalog", "Modelle mit Standard-Einkaufs- und Verkaufspreis. Grundlage für Bestellungen und neue Fahrzeuge.") +
     `<div class="bar">${searchBox("Modell, Hersteller, Klasse …")}<button class="btn ${n ? "on" : ""}" data-a="cfToggle" aria-expanded="${UI.cfOpen}">Filter${n ? ` · ${n} aktiv` : ""} ${UI.cfOpen ? "▴" : "▾"}</button>
-    <span class="grow"></span>${btn("mNew", "Neues Modell", "primary")}${btn("mEdit", "Bearbeiten")}${btn("mImport", "CSV-Import")}${adminDel()}</div>${panel}` +
-    tbl([["Nr."], ["Modell"], ["Hersteller"], ["Klasse", 0, 1], ["EK", 1], ["VK", 1], ["Marge", 1], ["Marge %", 1], ["Im Bestand", 1], ["Aktiv"], ...(canOrder ? [[""]] : [])],
-      list.map(m => ({ id: m.id, cells: [m.nr, esc(m.model), esc(m.make), esc(m.cat), num(m.ek), num(m.vk), num(m.vk - m.ek), m.vk ? pct(m).toFixed(1).replace(".", ",") + " %" : "–", inStock[m.id] || 0, m.active ? "ja" : "nein",
-        ...(canOrder ? [m.active ? `<button class="btn sm" data-a="mOrderRow" data-id="${esc(m.id)}" title="${esc(m.make + " " + m.model)} bestellen">Bestellen</button>` : `<span class="dim">inaktiv</span>`] : [])] })),
-      S.models.length ? "Kein Modell passt zu den Filtern." : "Noch keine Modelle. Lege ein Modell an oder importiere deine Tabelle als CSV-Datei.") +
+    <span class="grow"></span>${btn("mNew", "Neues Modell", "primary")}${btn("mImport", "CSV-Import")}</div>${panel}` +
+    tbl([["Nr."], ["Modell"], ["Hersteller"], ["Klasse", 0, 1], ["EK", 1], ["VK", 1], ["Marge", 1], ["Marge %", 1], ["Im Bestand", 1], ["Aktiv"]],
+      list.map(m => ({ id: m.id, cells: [m.nr, esc(m.model), esc(m.make), esc(m.cat), num(m.ek), num(m.vk), num(m.vk - m.ek), m.vk ? pct(m).toFixed(1).replace(".", ",") + " %" : "–", inStock[m.id] || 0, m.active ? "ja" : "nein"] })),
+      S.models.length ? "Kein Modell passt zu den Filtern." : "Noch keine Modelle. Lege ein Modell an oder importiere deine Tabelle als CSV-Datei.",
+      id => (canOrder && byId("models", id).active ? rb("mOrderRow", "Bestellen", "gold") : "") + rb("mEdit", "Bearbeiten") + rb("mDel", "Löschen", "danger") + rbAdmin()) +
     `<div class="foot">${list.length} von ${S.models.length} Modell(en)${list.length ? ` · EK ${money(Math.min(...list.map(m => m.ek)))} bis ${money(Math.max(...list.map(m => m.ek)))}` : ""}</div>`;
 }
 
@@ -407,8 +422,8 @@ function einstellungen() {
 function benutzer() {
   const list = (S.users || []).filter(u => match([u.username, u.fullName, S.roles[u.role]].join(" ")));
   return head("System", "Benutzer", "Jeder Mitarbeiter bekommt einen eigenen Zugang. Die Rolle bestimmt, welche Bereiche sichtbar sind.") +
-    `<div class="bar">${searchBox("Benutzer …")}<span class="grow"></span>${btn("uNew", "Neuer Benutzer", "primary")}${btn("uEdit", "Bearbeiten")}${adminDel()}</div>` +
-    tbl([["Benutzername"], ["Name"], ["Rolle"], ["Aktiv"]], list.map(u => ({ id: u.id, cells: [esc(u.username), esc(u.fullName), esc(S.roles[u.role] || u.role), u.active ? "ja" : pill("storno", "deaktiviert")] })), "Keine Benutzer") +
+    `<div class="bar">${searchBox("Benutzer …")}<span class="grow"></span>${btn("uNew", "Neuer Benutzer", "primary")}</div>` +
+    tbl([["Benutzername"], ["Name"], ["Rolle"], ["Aktiv"]], list.map(u => ({ id: u.id, cells: [esc(u.username), esc(u.fullName), esc(S.roles[u.role] || u.role), u.active ? "ja" : pill("storno", "deaktiviert")] })), "Keine Benutzer", id => rb("uEdit", "Bearbeiten") + rbAdmin()) +
     `<p class="foot">Rollen: Administrator sieht alles · Vertrieb: Verkauf, Bestand, Kunden, Bestellungen · Einkauf: Katalog, Bestellungen, Ankauf · Lager: Bestand und Ausstellung · Buchhaltung: Verkäufe, Ankäufe, Kunden.</p>`;
 }
 
@@ -814,7 +829,9 @@ const ACTIONS = {
     info("Fahrzeughistorie · " + esc(c.name), `<div class="tablewrap hist"><table><thead><tr><th>Datum</th><th>Vorgang</th><th>Beleg</th><th>Fahrzeug</th><th class="n">Betrag</th></tr></thead><tbody>${h.length ? h.map(r => `<tr><td>${de(r[0])}</td><td>${esc(r[1])}</td><td>${r[2]}</td><td>${esc(r[3])}</td><td class="n">${num(r[4])}</td></tr>`).join("") : `<tr><td colspan="5" class="empty">Noch keine Fahrzeugvorgänge.</td></tr>`}</tbody></table></div>`, true); },
   mNew: () => modelDialog(null),
   mEdit: () => { const m = selected("models", "ein Modell"); m && modelDialog(m); },
-  mOrderRow: el => orderDialog(null, { modelId: el.dataset.id }),
+  mOrderRow: () => { const m = selected("models", "ein Modell"); m && orderDialog(null, { modelId: m.id }); },
+  mDel: () => { const m = selected("models", "ein Modell"); m && ask("Modell löschen", `${esc(m.model)} – ${esc(m.make)} löschen? Wird das Modell noch verwendet, wird es nur deaktiviert.`, "Löschen", async () => done(await api("deleteModel", { id: m.id }))); },
+  cDel: () => { const c = selected("customers", "einen Kunden"); c && ask("Kunde löschen", `${esc(c.name)} löschen? Hat der Kunde schon Vorgänge, wird er nur deaktiviert.`, "Löschen", async () => done(await api("deleteCustomer", { id: c.id }))); },
   cfToggle: () => { UI.cfOpen = !UI.cfOpen; render(); if (UI.cfOpen) $("#cf_make")?.focus(); },
   cfReset: () => { UI.cf = { ...CAT_FILTER }; render(); },
   mImport: importDialog,
@@ -836,7 +853,12 @@ async function act(fn) { try { const r = await fn(); render(); r?.message && toa
 
 document.addEventListener("click", e => {
   const a = e.target.closest("[data-a]");
-  if (a) { e.preventDefault(); ACTIONS[a.dataset.a]?.(a); return; }
+  if (a) {
+    e.preventDefault();
+    const row = a.closest("#main tbody tr[data-id]");
+    if (row) { UI.sel[UI.view] = row.dataset.id; document.querySelectorAll("#main tbody tr.sel").forEach(x => x.classList.remove("sel")); row.classList.add("sel"); }
+    ACTIONS[a.dataset.a]?.(a); return;
+  }
   if (e.target.id === "ov" && $("#ov [data-a=close]")) { close(); return; }   // Pflicht-Dialoge bleiben offen
   const tr = e.target.closest("#main tbody tr[data-id]");
   if (tr) { UI.sel[UI.view] = tr.dataset.id; document.querySelectorAll("#main tbody tr.sel").forEach(x => x.classList.remove("sel")); tr.classList.add("sel"); }
