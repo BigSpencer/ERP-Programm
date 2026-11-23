@@ -306,3 +306,14 @@ th.sorted .arrow { opacity: 1; color: var(--gold); }
 .hits b { color: var(--gold-light); font-size: 20px; font-weight: 600; margin-right: 4px; font-variant-numeric: tabular-nums; }
 .hitsInline { color: var(--gold-light); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
 @media (max-width: 1000px) { .filters .fend { grid-column: 1 / -1; } }
+
+/* 2.0: Checkbox-Gruppen, Rollenbereich, Statistik */
+fieldset.checks { border: 1px solid var(--border); border-radius: 3px; padding: 8px 12px 10px; margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px 14px; }
+fieldset.checks legend { font-size: 12px; color: var(--muted); padding: 0 6px; }
+fieldset.checks .check { display: flex; align-items: flex-start; gap: 8px; color: var(--text); font-size: 13.5px; }
+fieldset.checks .check input { accent-color: var(--gold); width: 16px; height: 16px; margin-top: 2px; flex: none; }
+fieldset.checks small { display: block; color: var(--faint); font-size: 11px; }
+.head.sub2 { margin-top: 26px; align-items: center; }
+.head.sub2 p { margin: 2px 0 0; }
+.statTiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 760px) { .statTiles { grid-template-columns: minmax(0, 1fr); } }

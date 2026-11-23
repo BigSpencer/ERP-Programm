@@ -111,7 +111,7 @@ function monthly() {
 const VIEWS = [
   ["cockpit", "Cockpit", "Autohaus"], ["bestand", "Fahrzeugbestand", "Autohaus"], ["ausstellung", "Ausstellung", "Autohaus"],
   ["angebote", "Angebote", "Autohaus"], ["bestellungen", "Bestellungen", "Autohaus"], ["verkauf", "Verkauf", "Autohaus"], ["ankauf", "Gebrauchtwagen-Ankauf", "Autohaus"],
-  ["kunden", "Kunden", "Stammdaten"], ["katalog", "Fahrzeugkatalog", "Stammdaten"], ["einstellungen", "Firmendaten", "System"], ["benutzer", "Benutzer", "System"]];
+  ["kunden", "Kunden", "Stammdaten"], ["katalog", "Fahrzeugkatalog", "Stammdaten"], ["mitarbeiter", "Mitarbeiter", "Team"], ["benutzer", "Admins & Rollen", "System"], ["einstellungen", "Firmendaten", "System"]];
 const UI = { view: "cockpit", sel: {}, q: {}, sort: {}, filter: { bestand: "verfuegbar", cond: "", openOnly: true, year: String(new Date().getFullYear()) } };
 const allowed = v => S.me.views.includes(v);
 
@@ -146,7 +146,7 @@ function render() {
   if (!S) return;
   renderNav();
   const mob = `<div class="mobileWho">${esc(S.me.fullName || S.me.username)} · <button data-a="pw">Passwort</button><button data-a="logout">Abmelden</button></div>`;
-  const views = { cockpit, bestand, ausstellung, angebote, bestellungen, verkauf, ankauf, kunden, katalog, einstellungen, benutzer };
+  const views = { cockpit, bestand, ausstellung, angebote, bestellungen, verkauf, ankauf, kunden, katalog, einstellungen, benutzer, mitarbeiter };
   tblCounter = 0;
   $("#main").innerHTML = mob + views[UI.view]();
   const q = $("#q"); if (q) q.value = UI.q[UI.view] || "";
@@ -541,13 +541,110 @@ function einstellungen() {
 }
 
 /* Benutzer */
+const roleName = k => S.roleNames?.[k] || k;
 function benutzer() {
-  const list = (S.users || []).filter(u => match([u.username, u.fullName, S.roles[u.role]].join(" ")));
-  return head("System", "Benutzer", "Jeder Mitarbeiter bekommt einen eigenen Zugang. Die Rolle bestimmt, welche Bereiche sichtbar sind.") +
-    `<div class="bar">${searchBox("Benutzer …")}<span class="grow"></span>${btn("uNew", "Neuer Benutzer", "primary")}</div>` +
-    tbl([["Benutzername"], ["Name"], ["Rolle"], ["Aktiv"]], list.map(u => ({ id: u.id, cells: [esc(u.username), esc(u.fullName), esc(S.roles[u.role] || u.role), u.active ? "ja" : pill("storno", "deaktiviert")] })), "Keine Benutzer", id => rb("uEdit", "Bearbeiten") + rbAdmin()) +
-    `<p class="foot">Rollen: Administrator sieht alles · Vertrieb: Verkauf, Bestand, Kunden, Bestellungen · Einkauf: Katalog, Bestellungen, Ankauf · Lager: Bestand und Ausstellung · Buchhaltung: Verkäufe, Ankäufe, Kunden.</p>`;
+  const admins = (S.users || []).filter(u => u.admin && match([u.username, u.fullName].join(" ")));
+  const roles = S.roles || [];
+  return head("System", "Admins & Rollen", "Administratoren dürfen alles. Rollen legen fest, welche Bereiche Mitarbeiter sehen – Mitarbeiter selbst verwaltest du unter „Mitarbeiter“.") +
+    `<div class="bar">${searchBox("Admin …")}<span class="grow"></span>${btn("uNew", "Neuer Admin", "primary")}</div>` +
+    tbl([["Benutzername"], ["Name"], ["Aktiv"]], admins.map(u => ({ id: u.id, cells: [esc(u.username), esc(u.fullName), u.active ? "ja" : pill("storno", "deaktiviert")] })),
+      "Keine Admins", id => rb("uEdit", "Bearbeiten") + rbAdmin(), false) +
+    `<div class="head sub2"><div><div class="eyebrow">Rollen</div><p>Ein Mitarbeiter kann mehrere Rollen haben und sieht dann alle Bereiche dieser Rollen.</p></div>${btn("rNew", "Neue Rolle", "primary")}</div>` +
+    tbl([["Rolle"], ["Bereiche"], ["Mitarbeiter", 1], ["Art"]], roles.map(r => ({ id: "r" + r.id, cells: [esc(r.name),
+      r.key === "admin" ? "alle Bereiche" : r.modules.length ? r.modules.map(x => esc(S.modules[x] || x)).join(", ") : "<span class=dim>keine</span>",
+      r.users, r.builtin ? "Standard" : "eigene"] })), "Keine Rollen",
+      id => { const r = roles.find(x => "r" + x.id === id); return r.key === "admin" ? "" : rb("rEdit", "Bearbeiten") + rb("rDel", "Löschen", "danger"); }, false);
 }
+
+/* ---------------------------------------------------------------- Mitarbeiter & Statistiken */
+const PERIODS = [["monat", "Laufender Monat"], ["jahr", "Laufendes Jahr"], ["vorjahr", "Vorjahr"], ["alle", "Gesamt"]];
+function periodRange(key) {
+  const y = new Date().getFullYear(), t0 = today();
+  if (key === "monat") return [t0.slice(0, 8) + "01", t0];
+  if (key === "jahr") return [y + "-01-01", t0];
+  if (key === "vorjahr") return [(y - 1) + "-01-01", (y - 1) + "-12-31"];
+  return ["0000-01-01", "9999-12-31"];
+}
+function employeeStats(username, from, to) {
+  const inP = d => d && d >= from && d <= to;
+  const sales = S.sales.filter(s => s.status === "ok" && s.seller === username && inP(s.date));
+  const offers = S.offers.filter(o => o.createdBy === username && inP(o.date));
+  const won = offers.filter(o => o.status === "bestellt").length;
+  const revenue = sales.reduce((a, s) => a + s.price, 0), margin = sales.reduce((a, s) => a + s.price - s.ek, 0);
+  const last = S.sales.filter(s => s.status === "ok" && s.seller === username).map(s => s.date).sort().pop() || "";
+  return { sales: sales.length, revenue, margin, marginPct: revenue ? margin / revenue * 100 : null,
+    avg: sales.length ? revenue / sales.length : 0, offers: offers.length, won, quote: offers.length ? won / offers.length * 100 : null,
+    orders: S.orders.filter(o => o.createdBy === username && inP(o.date)).length,
+    purchases: S.purchases.filter(p => p.buyer === username && p.status !== "storniert" && inP(p.date)).length, last };
+}
+const pctTxt = v => v === null ? "–" : v.toFixed(1).replace(".", ",") + " %";
+function mitarbeiter() {
+  const per = UI.filter.period || "jahr", [from, to] = periodRange(per);
+  const users = (S.users || []).filter(u => match([u.username, u.fullName, ...u.roles.map(roleName)].join(" ")));
+  const rows = users.map(u => ({ u, st: employeeStats(u.username, from, to) }));
+  const team = (S.users || []).map(u => employeeStats(u.username, from, to));
+  const sum = k => team.reduce((a, x) => a + x[k], 0);
+  const tRev = sum("revenue"), tMar = sum("margin"), tOff = sum("offers"), tWon = sum("won");
+  const best = rows.filter(r => r.st.revenue > 0).sort((a, b) => b.st.revenue - a.st.revenue)[0];
+  const tile = (t, v, s) => `<div class="tile"><small>${t}</small><strong>${v}</strong><span>${s || "&nbsp;"}</span></div>`;
+  const isAdm = isAdmin();
+  return head("Team", "Mitarbeiter", "Mitarbeiter mit ihren Rollen verwalten und Leistungen auswerten. Klick auf „Statistik“ zeigt die Details eines Mitarbeiters.") +
+    `<div class="tiles">${tile("Verkäufe im Zeitraum", sum("sales"), "Umsatz " + money(tRev))}${tile("Rohertrag", money(tMar), "Marge " + pctTxt(tRev ? tMar / tRev * 100 : null))}
+      ${tile("Angebote", tOff, `${tWon} bestellt · Quote ${pctTxt(tOff ? tWon / tOff * 100 : null)}`)}${tile("Top-Verkäufer", best ? esc(best.u.fullName || best.u.username) : "–", best ? money(best.st.revenue) : "")}</div>` +
+    `<div class="bar">${searchBox("Name, Rolle …")}<select id="fPeriod" aria-label="Zeitraum">${PERIODS.map(([k, l]) => `<option value="${k}" ${k === per ? "selected" : ""}>${l}</option>`).join("")}</select>
+      <span class="grow"></span>${btn("eNew", "Neuer Mitarbeiter", "primary")}</div>` +
+    tbl([["Name"], ["Benutzer", 0, 1], ["Rollen"], ["Verkäufe", 1], ["Umsatz", 1], ["Rohertrag", 1], ["Ø Marge", 1], ["Angebote", 1], ["Quote", 1], ["Bestellungen", 1], ["Ankäufe", 1], ["Letzter Verkauf"], ["Aktiv"]],
+      rows.map(({ u, st }) => ({ id: u.id, cells: [esc(u.fullName || u.username), esc(u.username), u.admin ? pill("ausstellung", "Administrator") : u.roles.map(k => esc(roleName(k))).join(", "),
+        st.sales, num(st.revenue), num(st.margin), pctTxt(st.marginPct), st.offers, pctTxt(st.quote), st.orders, st.purchases, de(st.last) || "–", u.active ? "ja" : "nein"] })),
+      "Noch keine Mitarbeiter. Lege mit „Neuer Mitarbeiter“ den ersten an.",
+      id => { const u = byId("users", id); return rb("eStats", "Statistik", "gold") + (u.admin ? "" : rb("eEdit", "Bearbeiten")) + (isAdm && !u.admin ? rbAdmin() : ""); }) +
+    `<div class="foot">${rows.length} Mitarbeiter · Zeitraum: ${PERIODS.find(p => p[0] === per)[1]}</div>`;
+}
+function monthlyFor(username) {
+  const out = [], d = new Date(); d.setDate(1);
+  for (let i = 11; i >= 0; i--) {
+    const x = new Date(d.getFullYear(), d.getMonth() - i, 1), key = x.getFullYear() + "-" + String(x.getMonth() + 1).padStart(2, "0");
+    out.push([String(x.getMonth() + 1).padStart(2, "0") + "/" + String(x.getFullYear()).slice(2),
+      S.sales.filter(s => s.status === "ok" && s.seller === username && s.date.startsWith(key)).reduce((a, s) => a + s.price, 0)]);
+  }
+  return out;
+}
+function statsDialog(u) {
+  const per = UI.filter.period || "jahr", [from, to] = periodRange(per), st = employeeStats(u.username, from, to);
+  const tile = (t, v, s) => `<div class="tile"><small>${t}</small><strong>${v}</strong><span>${s || "&nbsp;"}</span></div>`;
+  const recent = S.sales.filter(s => s.status === "ok" && s.seller === u.username).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 8);
+  info(`${esc(u.fullName || u.username)} · Statistik`,
+    `<p class="sub">${u.admin ? "Administrator" : u.roles.map(k => esc(roleName(k))).join(", ")} · Zeitraum: ${PERIODS.find(p => p[0] === per)[1]}</p>
+    <div class="tiles statTiles">${tile("Verkäufe", st.sales, "Ø " + money(st.avg))}${tile("Umsatz", money(st.revenue))}${tile("Rohertrag", money(st.margin), "Marge " + pctTxt(st.marginPct))}
+      ${tile("Angebote", st.offers, `${st.won} bestellt · Quote ${pctTxt(st.quote)}`)}${tile("Bestellungen angelegt", st.orders)}${tile("Ankäufe", st.purchases)}</div>
+    <div class="chart"><h3 class="eyebrow">Verkäufe je Monat (letzte 12 Monate)</h3>${chart(monthlyFor(u.username))}</div>
+    <h3 class="eyebrow" style="margin:14px 0 8px">Letzte Verkäufe</h3>
+    <div class="tablewrap"><table><thead><tr><th>Datum</th><th>Vertrag</th><th>Fahrzeug</th><th>Käufer</th><th class="n">Preis</th><th class="n">Rohertrag</th></tr></thead><tbody>
+    ${recent.length ? recent.map(s => `<tr><td>${de(s.date)}</td><td>${s.nr}</td><td>${esc(vLabel(byId("vehicles", s.vehicleId)))}</td><td>${esc(custName(s.customerId))}</td><td class="n">${num(s.price)}</td><td class="n">${num(s.price - s.ek)}</td></tr>`).join("")
+      : `<tr><td colspan="6" class="empty">Noch keine Verkäufe.</td></tr>`}</tbody></table></div>`, true);
+}
+function employeeDialog(u) {
+  const roles = (S.roles || []).filter(r => r.key !== "admin").map(r => [r.key, r.name, r.modules.map(x => S.modules[x] || x).join(", ") || "keine Bereiche"]);
+  form({ title: u ? `Mitarbeiter ${esc(u.username)} bearbeiten` : "Neuer Mitarbeiter",
+    fields: [["fullName", "Name (erscheint als Verkäufer)"], ["username", "Benutzername (Anmeldung)"],
+      ["roles", "Rollen – der Mitarbeiter sieht alle Bereiche seiner Rollen", "checks", { options: roles }],
+      ["password", u ? "Neues Passwort (leer = unverändert)" : "Passwort", "password"], ["active", "Aktiv (darf sich anmelden)", "check"]],
+    values: u ? { ...u } : { roles: ["sales"], active: true },
+    onSubmit: async d => { const r = await api("saveEmployee", { ...d, id: u?.id }); UI.sel.mitarbeiter = r.id; return r.message; } });
+}
+function adminDialog(u) {
+  form({ title: u ? `Admin ${esc(u.username)} bearbeiten` : "Neuer Admin", sub: "Administratoren sehen und dürfen alles, auch Löschen, Firmendaten und Rollen.",
+    fields: [["fullName", "Name"], ["username", "Benutzername (Anmeldung)"], ["password", u ? "Neues Passwort (leer = unverändert)" : "Passwort", "password"], ["active", "Aktiv", "check"]],
+    values: u || { active: true },
+    onSubmit: async d => { const r = await api("saveUser", { ...d, admin: true, id: u?.id }); UI.sel.benutzer = r.id; return r.message; } });
+}
+function roleDialog(r) {
+  form({ title: r ? `Rolle ${esc(r.name)} bearbeiten` : "Neue Rolle",
+    fields: [["name", "Name der Rolle"], ["modules", "Bereiche, die diese Rolle sehen und bearbeiten darf", "checks", { options: Object.entries(S.modules) }]],
+    values: r ? { name: r.name, modules: r.modules } : { modules: ["cockpit"] },
+    onSubmit: async d => { const res = await api("saveRole", { ...d, id: r?.id }); UI.sel.benutzer = "r" + res.id; return res.message; } });
+}
+const selRole = () => { const id = UI.sel.benutzer; const r = id && id.startsWith("r") && (S.roles || []).find(x => "r" + x.id === id); if (!r) toast("Bitte zuerst eine Rolle auswählen."); return r; };
 
 /* ------------------------------------------------------------------ Dialoge */
 function modal(html, wide) {
@@ -574,6 +671,8 @@ function form({ title, sub, fields, values = {}, submit = "Speichern", onSubmit,
     if (type === "check") return `<label class="check ${cls || "full"}"><input type="checkbox" id="${id}" ${v ? "checked" : ""}>${label}</label>`;
     if (type === "select") return `<label class="${cls}">${label}<select id="${id}">${opts(extra.options, v, extra.empty)}</select></label>`;
     if (type === "area") return `<label class="full">${label}<textarea id="${id}" rows="2">${esc(v)}</textarea></label>`;
+    if (type === "checks") { const vals = new Set(Array.isArray(v) ? v : []);
+      return `<fieldset class="checks full" id="${id}"><legend>${label}</legend>${extra.options.map(([ov, ol, hint]) => `<label class="check"><input type="checkbox" value="${esc(ov)}" ${vals.has(ov) ? "checked" : ""}><span>${esc(ol)}${hint ? `<small>${esc(hint)}</small>` : ""}</span></label>`).join("")}</fieldset>`; }
     const t = type === "date" ? "date" : type === "password" ? "password" : "text";
     const im = type === "money" || type === "int" ? ' inputmode="decimal"' : "";
     const ac = type === "password" ? ` autocomplete="${extra.ac || "new-password"}"` : "";
@@ -582,7 +681,7 @@ function form({ title, sub, fields, values = {}, submit = "Speichern", onSubmit,
   }).join("");
   modal(`<h2>${title}</h2>${sub ? `<p class="sub">${sub}</p>` : ""}<form id="mf" novalidate><div class="form">${f}</div><p class="err" id="err" role="alert"></p>
     <div class="actions">${noCancel ? "" : `<button type="button" class="btn" data-a="close">Abbrechen</button>`}<button type="submit" class="btn ${danger ? "dangerBtn" : "primary"}">${submit}</button></div></form>`, wide);
-  const read = () => Object.fromEntries(fields.filter(x => !["sec", "calc"].includes(x[2])).map(([k, , type]) => { const el = $("#f_" + k); return [k, type === "check" ? el.checked : el.value]; }));
+  const read = () => Object.fromEntries(fields.filter(x => !["sec", "calc"].includes(x[2])).map(([k, , type]) => { const el = $("#f_" + k); return [k, type === "check" ? el.checked : type === "checks" ? [...el.querySelectorAll("input:checked")].map(i => i.value) : el.value]; }));
   $("#mf").addEventListener("submit", async e => {
     e.preventDefault();
     const box = $("#mf"); box.classList.add("busy");
@@ -742,7 +841,7 @@ function uploadLogo(file) {
 /* Administratoren: Eintrag endgültig löschen (ohne Statusprüfung, ohne Rückbuchung) */
 const PURGE_KIND = { bestand: ["vehicle", "vehicles", "ein Fahrzeug"], ausstellung: ["vehicle", "vehicles", "ein Fahrzeug"], angebote: ["offer", "offers", "ein Angebot"],
   bestellungen: ["order", "orders", "eine Bestellung"], verkauf: ["sale", "sales", "einen Verkauf"], ankauf: ["purchase", "purchases", "einen Ankauf"],
-  kunden: ["customer", "customers", "einen Kunden"], katalog: ["model", "models", "ein Modell"], benutzer: ["user", "users", "einen Benutzer"] };
+  kunden: ["customer", "customers", "einen Kunden"], katalog: ["model", "models", "ein Modell"], benutzer: ["user", "users", "einen Admin"], mitarbeiter: ["user", "users", "einen Mitarbeiter"] };
 function purgeEffects(kind, x) {
   const n = (list, f) => S[list].filter(f).length, out = [];
   const add = (cnt, one, many, what) => cnt && out.push(`${cnt} ${cnt === 1 ? one : many} ${what}`);
@@ -895,12 +994,6 @@ function modelDialog(m) {
     ["ek", "Einkaufspreis", "money"], ["vk", "Verkaufspreis", "money"], ["active", "Aktiv", "check"]],
     values: m || { active: true }, onSubmit: async d => { const r = await api("saveModel", { ...d, id: m?.id }); UI.sel.katalog = r.id; return r.message; } });
 }
-function userDialog(u) {
-  form({ title: u ? `Benutzer ${esc(u.username)} bearbeiten` : "Neuer Benutzer",
-    fields: [["username", "Benutzername"], ["fullName", "Name (erscheint als Verkäufer)"], ["role", "Rolle", "select", { options: Object.entries(S.roles) }],
-      ["password", u ? "Neues Passwort (leer = unverändert)" : "Passwort", "password"], ["active", "Aktiv", "check"]],
-    values: u || { role: "sales", active: true }, onSubmit: async d => { const r = await api("saveUser", { ...d, id: u?.id }); UI.sel.benutzer = r.id; return r.message; } });
-}
 function passwordDialog(forced) {
   form({ title: forced ? "Neues Passwort festlegen" : "Passwort ändern", noCancel: forced,
     sub: forced ? "Du verwendest noch das Standardpasswort. Lege jetzt ein eigenes Passwort fest." : "",
@@ -1015,10 +1108,16 @@ const ACTIONS = {
   resetLogo: () => ask("Standardlogo wiederherstellen", "Das hochgeladene Logo wird entfernt und das mitgelieferte Logo wieder verwendet.", "Wiederherstellen",
     async () => done(await api("resetLogo", {}))),
   wipe: () => wipeDialog(),
-  uNew: () => userDialog(null),
-  uEdit: () => { const u = selected("users", "einen Benutzer"); u && userDialog(u); },
+  uNew: () => adminDialog(null),
+  uEdit: () => { const u = selected("users", "einen Admin"); u && adminDialog(u); },
+  eNew: () => employeeDialog(null),
+  eEdit: () => { const u = selected("users", "einen Mitarbeiter"); u && employeeDialog(u); },
+  eStats: () => { const u = selected("users", "einen Mitarbeiter"); u && statsDialog(u); },
+  rNew: () => roleDialog(null),
+  rEdit: () => { const r = selRole(); r && roleDialog(r); },
+  rDel: () => { const r = selRole(); r && ask("Rolle löschen", `Rolle „${esc(r.name)}“ löschen?` + (r.users ? ` Sie ist noch ${r.users} Mitarbeiter(n) zugewiesen – bitte vorher dort entfernen.` : ""), "Löschen", async () => done(await api("deleteRole", { id: r.id })), true); },
 };
-const DOUBLE = { bestand: "vEdit", ausstellung: "sMove", angebote: "aEdit", bestellungen: "oEdit", verkauf: "kDoc", ankauf: "pDoc", kunden: "cHist", katalog: "mEdit", benutzer: "uEdit" };
+const DOUBLE = { bestand: "vEdit", ausstellung: "sMove", angebote: "aEdit", bestellungen: "oEdit", verkauf: "kDoc", ankauf: "pDoc", kunden: "cHist", katalog: "mEdit", benutzer: "uEdit", mitarbeiter: "eStats" };
 async function act(fn) { try { const r = await fn(); render(); r?.message && toast(r.message); } catch (e) { toast(e.message); } }
 
 document.addEventListener("click", e => {
@@ -1066,6 +1165,7 @@ document.addEventListener("change", e => {
   if (t.id === "fCond") { UI.filter.cond = t.value; render(); }
   if (t.id === "fOpen") { UI.filter.openOnly = t.checked; render(); }
   if (t.id === "fYear") { UI.filter.year = t.value; render(); }
+  if (t.id === "fPeriod") { UI.filter.period = t.value; render(); }
   if (t.id === "fOffer") { UI.filter.offer = t.value; render(); }
   if (t.id === "fPurchase") { UI.filter.purchase = t.value; render(); }
   if (t.classList.contains("rowStatus")) changeStatus(t.dataset.kind, t.dataset.id, t.value);

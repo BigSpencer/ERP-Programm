@@ -65,7 +65,7 @@ COND_FROM_WEB = {"neu": "new", "gebraucht": "used"}
 VIEW_MODULES = {
     "cockpit": "cockpit", "bestand": "vehicles", "ausstellung": "showroom", "bestellungen": "vehicle_orders",
     "angebote": "offers", "verkauf": "vehicle_sales", "ankauf": "used_purchases", "kunden": "customers", "katalog": "vehicle_models",
-    "einstellungen": "admin", "benutzer": "admin",
+    "mitarbeiter": "employees", "einstellungen": "admin", "benutzer": "admin",
 }
 
 
@@ -144,7 +144,8 @@ def state(s, user: m.User) -> dict:
         "orders": [{"id": _s(o.id), "nr": o.number, "modelId": _s(o.model_id), "customerId": _s(o.customer_id),
                     "color": o.color, "ek": _f(o.purchase_price), "vk": _f(o.sales_price), "deposit": _f(o.deposit),
                     "date": _date(o.order_date), "expected": _date(o.expected_date), "arrival": _date(o.arrival_date),
-                    "status": O_STATUS.get(o.status, o.status), "vehicleId": _s(o.vehicle_id), "notes": o.notes}
+                    "status": O_STATUS.get(o.status, o.status), "vehicleId": _s(o.vehicle_id), "notes": o.notes,
+                    "createdBy": o.created_by}
                    for o in s.scalars(select(m.VehicleOrder))],
         "sales": [{"id": _s(x.id), "nr": x.number, "vehicleId": _s(x.vehicle_id), "customerId": _s(x.customer_id),
                    "date": _date(x.sale_date), "price": _f(x.price), "ek": _f(x.purchase_price),
@@ -166,17 +167,24 @@ def state(s, user: m.User) -> dict:
                        "notes": c.notes, "active": c.active}
                       for c in s.scalars(select(m.Customer))],
     }
-    if user.role == "admin":
-        data["users"] = [{"id": _s(u.id), "username": u.username, "fullName": u.full_name, "role": u.role,
-                          "active": u.active} for u in s.scalars(select(m.User).order_by(m.User.username))]
-        data["roles"] = m.ROLES
+    mods = auth.modules_for(s, user)
+    roles = s.scalars(select(m.Role).order_by(m.Role.builtin.desc(), m.Role.name)).all()
+    data["roleNames"] = {r.key: r.name for r in roles}
+    if mods & {"admin", "employees"}:
+        users = s.scalars(select(m.User).order_by(m.User.username)).all()
+        data["users"] = [{"id": _s(u.id), "username": u.username, "fullName": u.full_name, "roles": u.role_keys,
+                          "admin": u.is_admin, "active": u.active} for u in users]
+        data["roles"] = [{"id": _s(r.id), "key": r.key, "name": r.name, "modules": r.module_list, "builtin": r.builtin,
+                          "users": sum(1 for u in users if r.key in u.role_keys)} for r in roles]
+        data["modules"] = m.WEB_MODULES
     return data
 
 
 def me(s, user: m.User) -> dict:
-    return {"username": user.username, "fullName": user.full_name, "role": user.role,
-            "roleName": m.ROLES.get(user.role, user.role),
-            "views": [v for v, mod in VIEW_MODULES.items() if user.may(mod)],
+    mods, names = auth.modules_for(s, user), auth.role_names(s)
+    return {"username": user.username, "fullName": user.full_name, "role": "admin" if user.is_admin else user.role,
+            "roleName": " · ".join(names.get(k, k) for k in user.role_keys),
+            "views": [v for v, mod in VIEW_MODULES.items() if mod in mods],
             "mustChangePassword": auth.verify_password(DEFAULT_PASSWORD, user.password_hash)}
 
 
@@ -329,7 +337,8 @@ def a_order_status(s, b):
     status = O_STATUS_FROM_WEB.get(b.get("status"))
     if status is None:
         raise BusinessError("Unbekannter Status")
-    if status == "delivered" and not m.User(role=context.role).may("vehicle_sales"):
+    me_user = s.scalars(select(m.User).where(m.User.username == context.username)).first()
+    if status == "delivered" and (me_user is None or not auth.may(s, me_user, "vehicle_sales")):
         raise BusinessError("Ausliefern erzeugt einen Verkauf – dafür fehlt Ihrer Rolle die Berechtigung")
     trade = None
     if b.get("trade"):
@@ -430,9 +439,36 @@ def a_wipe(s, b):
 def a_save_user(s, b):
     uid = _id(b.get("id"))
     password = b.get("password") or None
-    u = auth.save_user(s, uid, _str(b.get("username")), _str(b.get("fullName")), _str(b.get("role")),
+    roles = b.get("roles") if isinstance(b.get("roles"), list) else [_str(b.get("role"))]
+    if b.get("admin"):
+        roles = ["admin"]
+    elif "admin" in roles:
+        raise BusinessError("Administratoren werden unter „Admins & Rollen“ angelegt")
+    u = auth.save_user(s, uid, _str(b.get("username")), _str(b.get("fullName")), roles,
                        bool(b.get("active", True)), password)
-    return {"id": _s(u.id), "message": f"Benutzer {u.username} gespeichert"}
+    return {"id": _s(u.id), "message": f"{'Admin' if u.is_admin else 'Mitarbeiter'} {u.username} gespeichert"}
+
+
+def a_save_employee(s, b):
+    """Mitarbeiter anlegen/ändern – wer Mitarbeiter verwalten darf, aber kein Admin ist, darf keine Admins anlegen."""
+    uid = _id(b.get("id"))
+    if uid:
+        existing = s.get(m.User, uid)
+        if existing is not None and existing.is_admin:
+            raise BusinessError("Administratoren werden unter „Admins & Rollen“ verwaltet")
+    roles = [r for r in (b.get("roles") or []) if r != "admin"]
+    u = auth.save_user(s, uid, _str(b.get("username")), _str(b.get("fullName")), roles,
+                       bool(b.get("active", True)), b.get("password") or None)
+    return {"id": _s(u.id), "message": f"Mitarbeiter {u.username} gespeichert"}
+
+
+def a_save_role(s, b):
+    r = auth.save_role(s, _id(b.get("id")), _str(b.get("name")), list(b.get("modules") or []))
+    return {"id": _s(r.id), "message": f"Rolle {r.name} gespeichert"}
+
+
+def a_delete_role(s, b):
+    return {"message": f"Rolle {auth.delete_role(s, _id(b['id']))} gelöscht"}
 
 
 ACTIONS: dict[str, tuple[str, Callable[[Any, dict], dict]]] = {
@@ -462,6 +498,9 @@ ACTIONS: dict[str, tuple[str, Callable[[Any, dict], dict]]] = {
     "importModels": ("vehicle_models", a_import_models),
     "settings": ("admin", a_settings),
     "saveUser": ("admin", a_save_user),
+    "saveEmployee": ("employees", a_save_employee),
+    "saveRole": ("admin", a_save_role),
+    "deleteRole": ("admin", a_delete_role),
     "purge": ("admin", a_purge),
     "deleteCustomer": ("admin", a_delete_customer),
     "deleteModel": ("admin", a_delete_model),
@@ -688,7 +727,8 @@ def create_app(url: str | None = None) -> FastAPI:
             if auth.verify_password(DEFAULT_PASSWORD, user.password_hash):
                 return _error(403, "Bitte zuerst das Standardpasswort ändern")
             allowed = (module,) + EXTRA_MODULES.get(name, ())
-            if not any(user.may(mod) for mod in allowed):
+            mods = auth.modules_for(s, user)
+            if not any(mod in mods for mod in allowed):
                 return _error(403, "Dafür fehlt Ihrer Rolle die Berechtigung")
             return fn(s, data)
         return await run_in_threadpool(with_session, do)

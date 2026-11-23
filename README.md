@@ -20,6 +20,8 @@ Kaufdaten**; diese werden ausschließlich im laufenden Betrieb in der eigenen Da
 | **Gebrauchtwagen-Ankauf** | Status beim Erfassen: *Angekauft* (sofort bezahlt, Fahrzeug im Bestand) oder *Inzahlungnahme* (Fahrzeug vorgemerkt, wird bei der Übergabe eines verkauften Fahrzeugs über eine Auswahlliste verrechnet → *Verrechnet*) · Storno · Vertrag als PDF/Druck |
 | **Fahrzeugkatalog** | Modelle mit Standard-EK und -VK, Marge in € und %, Bestand je Modell · **CSV-Import** (z. B. aus Google Sheets) |
 | **Administration** (nur Admins, Web) | *Löschen* in jeder Zeile: zuerst sauber im Ablauf (Storno, Rückbuchung, Verknüpfungen), sonst auf Wunsch endgültig; Kunden/Modelle mit Vorgängen wahlweise deaktivieren oder endgültig löschen · *Datenbank bereinigen* in den Firmendaten (alle Geschäftsdaten; Benutzer, Firmendaten, Kontenplan und wahlweise der Katalog bleiben; Bestätigung mit „LÖSCHEN“ und Passwort) |
+| **Mitarbeiter** (Web, ab 2.0) | Mitarbeiter mit **mehreren Rollen** verwalten · Statistiken für alle und je Mitarbeiter (Monat/Jahr/Vorjahr/gesamt): Verkäufe, Umsatz, Rohertrag, Ø-Marge, Angebote und Abschlussquote, Bestellungen, Ankäufe, Verkaufsdiagramm |
+| **Admins & Rollen** (Web, ab 2.0) | Admin-Zugänge · frei definierbare Rollen mit den Bereichen, die sie sehen dürfen; die bisherigen Rollen werden mit ihren Rechten übernommen |
 | **Kunden** | Kundenstamm plus **Fahrzeughistorie** je Kunde (Käufe, Inzahlungnahmen, Ankäufe, Bestellungen, Reservierungen) |
 
 Fahrzeugpreise werden brutto geführt. Automatische Buchungen in der Finanzbuchhaltung:
@@ -152,7 +154,7 @@ ausführen (Netzfreigabe in `pg_hba.conf`/`postgresql.conf` beachten, siehe Date
 Der GitHub-Actions-Workflow baut bei jedem Push fertige Pakete
 (Actions → *Tests & Installer* → Artefakte):
 
-* Windows: `ERPDesk-Setup-1.10.0.exe` (Installer mit Startmenü- und Desktop-Verknüpfung)
+* Windows: `ERPDesk-Setup-2.0.0.exe` (Installer mit Startmenü- und Desktop-Verknüpfung)
 * macOS / Linux: Ordner `ERPDesk/` mit ausführbarer Datei
 
 Selbst bauen:

@@ -66,7 +66,22 @@ MODULE_ROLES = {
     "purchasing": {"purchasing"},
     "inventory": {"warehouse", "purchasing"},
     "finance": {"accounting"},
+    "employees": set(),
     "admin": set(),
+}
+
+# Bereiche der Web-Oberfläche, die einer Rolle zugewiesen werden können
+WEB_MODULES = {
+    "cockpit": "Cockpit",
+    "vehicles": "Fahrzeugbestand",
+    "showroom": "Ausstellung",
+    "offers": "Angebote",
+    "vehicle_orders": "Bestellungen",
+    "vehicle_sales": "Verkauf",
+    "used_purchases": "Gebrauchtwagen-Ankauf",
+    "customers": "Kunden",
+    "vehicle_models": "Fahrzeugkatalog",
+    "employees": "Mitarbeiter & Statistiken",
 }
 
 
@@ -76,11 +91,37 @@ class User(Versioned, Base):
     username: Mapped[str] = mapped_column(String(50), unique=True)
     full_name: Mapped[str] = mapped_column(String(120), default="")
     password_hash: Mapped[str] = mapped_column(String(200))
-    role: Mapped[str] = mapped_column(String(20), default="sales")
+    role: Mapped[str] = mapped_column(String(20), default="sales")      # Hauptrolle ("admin" bei Administratoren)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Ab Version 2.0: mehrere Rollen je Mitarbeiter (Rollenschlüssel, kommagetrennt)
+    roles: Mapped[str | None] = mapped_column(Text, nullable=True, default="")
+
+    @property
+    def role_keys(self) -> list[str]:
+        keys = [k for k in (self.roles or "").split(",") if k]
+        return keys or [self.role]
+
+    @property
+    def is_admin(self) -> bool:
+        return "admin" in self.role_keys or self.role == "admin"
 
     def may(self, module: str) -> bool:
-        return self.role == "admin" or self.role in MODULE_ROLES.get(module, set())
+        """Statische Rechteprüfung (Desktop). Die Web-Version nutzt die Rollen aus der Datenbank."""
+        return self.is_admin or any(k in MODULE_ROLES.get(module, set()) for k in self.role_keys)
+
+
+class Role(Versioned, Base):
+    """Rolle mit den Bereichen, die sie sehen und bearbeiten darf (Web-Version)."""
+    __tablename__ = "roles"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    key: Mapped[str] = mapped_column(String(40), unique=True)
+    name: Mapped[str] = mapped_column(String(80))
+    modules: Mapped[str] = mapped_column(Text, default="")              # kommagetrennt, siehe WEB_MODULES
+    builtin: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    @property
+    def module_list(self) -> list[str]:
+        return [x for x in (self.modules or "").split(",") if x]
 
 
 class Setting(Base):

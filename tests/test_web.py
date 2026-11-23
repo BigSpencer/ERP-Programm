@@ -251,3 +251,31 @@ def test_delete_customer_and_model_deactivates_when_used(client):
     assert "deaktiviert" in do(client, "deleteModel", {"id": mid})["message"]
     st = client.get("/api/state").json()
     assert [c["active"] for c in st["customers"]] == [False] and st["models"][0]["active"] is False
+
+
+def test_roles_and_employees_v2(client):
+    login(client)
+    client.post("/api/password", json={"old": "admin", "new": "geheim123"})
+    st = client.get("/api/state").json()
+    keys = {r["key"] for r in st["roles"]}
+    assert {"admin", "sales", "purchasing", "warehouse", "accounting"} <= keys          # Standardrollen übernommen
+    rid = do(client, "saveRole", {"name": "Teamleitung", "modules": ["employees", "cockpit"]})["id"]
+    role_key = next(r["key"] for r in client.get("/api/state").json()["roles"] if r["id"] == rid)
+    do(client, "saveRole", {"name": "Kaputt", "modules": ["gibtsnicht"]}, 400)
+    # Mitarbeiter mit zwei Rollen: Rechte = Vereinigung
+    do(client, "saveEmployee", {"username": "tl", "fullName": "Tina Leitung", "roles": ["warehouse", role_key],
+                                "password": "tl", "active": True})
+    do(client, "saveEmployee", {"username": "x", "roles": ["admin"], "password": "x"}, 400)   # kein Admin über Mitarbeiter
+    client.post("/api/logout", json={})
+    me = login(client, "tl", "tl")["me"]
+    assert {"bestand", "ausstellung", "mitarbeiter", "cockpit"} <= set(me["views"])
+    assert "verkauf" not in me["views"] and "benutzer" not in me["views"] and "Teamleitung" in me["roleName"]
+    st = client.get("/api/state").json()
+    assert any(u["username"] == "tl" and u["roles"] == ["warehouse", role_key] for u in st["users"])
+    do(client, "saveEmployee", {"username": "neu", "fullName": "Neu", "roles": ["sales"], "password": "n"})  # darf Mitarbeiter anlegen
+    admin_id = next(u["id"] for u in st["users"] if u["admin"])
+    do(client, "saveEmployee", {"id": admin_id, "username": "admin", "roles": ["sales"]}, 400)  # Admins nicht hier
+    do(client, "saveRole", {"name": "X", "modules": []}, 403)                                   # Rollen nur Admins
+    client.post("/api/logout", json={})
+    login(client, "admin", "geheim123")
+    do(client, "deleteRole", {"id": rid}, 400)                                                  # noch zugewiesen

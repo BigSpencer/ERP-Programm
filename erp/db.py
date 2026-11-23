@@ -170,6 +170,11 @@ def seed(s: Session) -> None:
             s.add(m.Account(number=number, name=name, account_type=typ))
     if s.scalar(select(m.Warehouse).limit(1)) is None:
         s.add(m.Warehouse(code="HL", name="Hauptlager"))
+    if s.scalar(select(m.Role).limit(1)) is None:          # Rollen aus den bisherigen festen Rechten übernehmen
+        for key, name in m.ROLES.items():
+            mods = list(m.WEB_MODULES) if key == "admin" else \
+                [mod for mod in m.WEB_MODULES if key in m.MODULE_ROLES.get(mod, set())]
+            s.add(m.Role(key=key, name=name, modules=",".join(mods), builtin=True))
     if s.scalar(select(m.User).limit(1)) is None:
         s.add(m.User(username="admin", full_name="Administrator",
                      password_hash=hash_password("admin"), role="admin"))
