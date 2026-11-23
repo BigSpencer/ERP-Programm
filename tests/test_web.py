@@ -215,6 +215,8 @@ def test_purge_and_wipe_admin_only(client):
     login(client, "vk", "vk")
     do(client, "purge", {"kind": "customer", "id": "1"}, 403)
     do(client, "wipe", {"password": "vk", "confirmation": "LÖSCHEN"}, 403)
+    for action in ("deleteOffer", "deleteOrder", "deleteSale", "deleteCustomer", "deleteModel"):
+        do(client, action, {"id": "1"}, 403)
 
 
 def test_logo_upload_keeps_original_bytes(client):

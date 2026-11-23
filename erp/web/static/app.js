@@ -172,11 +172,10 @@ function tbl(cols, rows, emptyText, acts, main = !!acts) {
 }
 /* Knöpfe in der Tabellenzeile; ein Klick wählt zugleich die Zeile aus */
 const rb = (action, label, cls = "") => `<button class="btn sm ${cls}" data-a="${action}">${label}</button>`;
-const rbAdmin = () => isAdmin() ? rb("purge", "Endgültig", "danger adminDel") : "";
+const rbAdmin = () => isAdmin() ? rb("del", "Löschen", "danger") : "";   // Löschen nur für Administratoren
 const searchBox = ph => `<input id="q" class="search" type="search" placeholder="${ph}" aria-label="Suchen">`;
 const btn = (action, label, cls = "") => `<button class="btn ${cls}" data-a="${action}">${label}</button>`;
 const isAdmin = () => S.me.role === "admin";
-const adminDel = () => isAdmin() ? `<button class="btn danger adminDel" data-a="purge" title="Nur für Administratoren: Eintrag ohne Rücksicht auf den Status komplett entfernen">Endgültig löschen</button>` : "";
 
 /* Cockpit */
 function cockpit() {
@@ -284,7 +283,7 @@ function angebote() {
           `<span class="${late ? "late" : ""}">${de(o.validUntil) || "–"}${late ? " · abgelaufen?" : ""}</span>`,
           statusSelect("offer", o.id, o.status, OFFER_STATUS, offerNext(o)), ord ? ord.nr : ""] }; }),
       S.offers.length ? "Keine Angebote für diesen Filter" : "Noch keine Angebote. Lege mit „Neues Angebot“ das erste an.",
-      id => (byId("offers", id).status !== "bestellt" ? rb("aEdit", "Bearbeiten") : "") + rb("aDel", "Löschen", "danger") + rbAdmin()) +
+      id => (byId("offers", id).status !== "bestellt" ? rb("aEdit", "Bearbeiten") : "") + rbAdmin()) +
     `<div class="foot">${list.length} Angebot(e)${sum ? ` · offenes Volumen ${money(sum)}` : ""}</div>`;
 }
 
@@ -301,7 +300,7 @@ function bestellungen() {
         return { id: o.id, cells: [o.nr, de(o.date), esc(m ? `${m.model} – ${m.make}` : ""), esc(o.color), esc(o.customerId ? custName(o.customerId) : "– Lager –"), num(o.vk), num(o.deposit), num(o.vk - o.deposit),
           `<span class="${late ? "late" : ""}">${de(o.expected) || "–"}${late ? " · überfällig" : ""}</span>`,
           statusSelect("order", o.id, o.status, ORDER_STATUS, orderNext(o)), o.vehicleId ? byId("vehicles", o.vehicleId)?.nr || "" : "", offerNr(o.id)] }; }),
-      "Keine Bestellungen", id => (byId("orders", id).status === "bestellt" ? rb("oEdit", "Bearbeiten") : "") + rb("oDel", "Löschen", "danger") + rbAdmin());
+      "Keine Bestellungen", id => (byId("orders", id).status === "bestellt" ? rb("oEdit", "Bearbeiten") : "") + rbAdmin());
 }
 
 /* Verkauf */
@@ -316,7 +315,7 @@ function verkauf() {
     <span class="grow"></span>${btn("vSell", "Neuer Verkauf", "primary")}</div>` +
     tbl([["Nr."], ["Datum"], ["Fahrzeug"], ["Käufer"], ["Kaufpreis", 1], ["Anzahlung", 1], ["Inzahlungn.", 1], ["Restzahlung", 1], ["EK", 1], ["Rohertrag", 1], ["Zahlung", 0, 1], ["Verkäufer", 0, 1], ["Status"], ["Bestellung", 0, 1]],
       list.map(s => ({ id: s.id, cells: [s.nr, de(s.date), esc(vLabel(byId("vehicles", s.vehicleId))), esc(custName(s.customerId)), num(s.price), s.deposit ? num(s.deposit) : "–", s.tradeValue ? num(s.tradeValue) : "–", num(s.price - s.tradeValue - s.deposit), num(s.ek),
-        num(s.price - s.ek), PAY[s.pay], esc(s.seller), statusSelect("sale", s.id, s.status, SALE_STATUS, saleNext(s)), s.orderId ? byId("orders", s.orderId)?.nr || "" : ""] })), "Keine Verkäufe im gewählten Zeitraum", id => rb("kDoc", "Vertrag") + rb("kDel", "Löschen", "danger") + rbAdmin()) +
+        num(s.price - s.ek), PAY[s.pay], esc(s.seller), statusSelect("sale", s.id, s.status, SALE_STATUS, saleNext(s)), s.orderId ? byId("orders", s.orderId)?.nr || "" : ""] })), "Keine Verkäufe im gewählten Zeitraum", id => rb("kDoc", "Vertrag") + rbAdmin()) +
     `<div class="foot">${ok.length} Verkauf/Verkäufe · Umsatz ${money(tot)} · Rohertrag ${money(mg)}</div>
     <div style="margin-top:18px"><h3 class="eyebrow">Nach Verkäufer</h3>${tbl([["Verkäufer"], ["Anzahl", 1], ["Umsatz", 1], ["Rohertrag", 1]],
       Object.entries(bySeller).sort((a, b) => b[1][1] - a[1][1]).map(([n, [c, t, m]]) => ({ id: "s-" + n, cells: [esc(n), c, num(t), num(m)] })), "Keine Daten")}</div>`;
@@ -351,7 +350,7 @@ function kunden() {
     `<div class="bar">${searchBox("Name, Telefon …")}<span class="grow"></span>${btn("cNew", "Neuer Kunde", "primary")}</div>` +
     tbl([["Nr."], ["Name"], ["Telefon"], ["E-Mail", 0, 1], ["Käufe", 1], ["Umsatz", 1], ["Notizen", 0, 1]],
       list.map(c => { const s = S.sales.filter(x => x.customerId === c.id && x.status === "ok"); return { id: c.id, cells: [c.nr, esc(c.name), esc(c.phone), esc(c.email), s.length, num(s.reduce((a, x) => a + x.price, 0)), esc(c.notes)] }; }),
-      "Noch keine Kunden", id => rb("cEdit", "Bearbeiten") + rb("cHist", "Historie") + rb("cDel", "Löschen", "danger") + rbAdmin());
+      "Noch keine Kunden", id => rb("cEdit", "Bearbeiten") + rb("cHist", "Historie") + rbAdmin());
 }
 
 /* Katalog */
@@ -394,7 +393,7 @@ function katalog() {
     tbl([["Nr."], ["Modell"], ["Hersteller"], ["Klasse", 0, 1], ["EK", 1], ["VK", 1], ["Marge", 1], ["Marge %", 1], ["Im Bestand", 1], ["Aktiv"]],
       list.map(m => ({ id: m.id, cells: [m.nr, esc(m.model), esc(m.make), esc(m.cat), num(m.ek), num(m.vk), num(m.vk - m.ek), m.vk ? pct(m).toFixed(1).replace(".", ",") + " %" : "–", inStock[m.id] || 0, m.active ? "ja" : "nein"] })),
       S.models.length ? "Kein Modell passt zu den Filtern." : "Noch keine Modelle. Lege ein Modell an oder importiere deine Tabelle als CSV-Datei.",
-      id => (canOrder && byId("models", id).active ? rb("mOrderRow", "Bestellen", "gold") : "") + rb("mEdit", "Bearbeiten") + rb("mDel", "Löschen", "danger") + rbAdmin()) +
+      id => (canOrder && byId("models", id).active ? rb("mOrderRow", "Bestellen", "gold") : "") + rb("mEdit", "Bearbeiten") + rbAdmin()) +
     `<div class="foot">${list.length} von ${S.models.length} Modell(en)${list.length ? ` · EK ${money(Math.min(...list.map(m => m.ek)))} bis ${money(Math.max(...list.map(m => m.ek)))}` : ""}</div>`;
 }
 
@@ -640,16 +639,64 @@ function purgeEffects(kind, x) {
   }
   return out;
 }
-function adminPurge() {
+/* Löschen (nur Administratoren):
+   1. sauber im Ablauf (Storno, Rückbuchung, Verknüpfungen lösen) – wo es das gibt
+   2. geht das nicht, bietet dasselbe Fenster „Trotzdem endgültig löschen“ an */
+const SOFT_DELETE = { offer: "deleteOffer", order: "deleteOrder", sale: "deleteSale", customer: "deleteCustomer", model: "deleteModel" };
+function deleteDialog() {
   const [kind, list, what] = PURGE_KIND[UI.view] || [];
   if (!kind) return;
   const x = selected(list, what); if (!x) return;
-  const label = x.nr || x.username || "";
+  const label = esc(x.nr || x.username || "");
   const name = kind === "customer" ? ` (${esc(x.name)})` : kind === "vehicle" ? ` (${esc(vName(x))})` : kind === "model" ? ` (${esc(x.model)} – ${esc(x.make)})` : "";
   const fx = purgeEffects(kind, x);
-  ask("Endgültig löschen", `<b>${esc(label)}${name}</b> wird vollständig aus der Datenbank entfernt, unabhängig vom Status. Es wird nichts zurückgebucht und kein Status angepasst.` +
-    (fx.length ? `<br><br>Außerdem:<br>• ${fx.join("<br>• ")}` : "") + `<br><br><b>Das kann nicht rückgängig gemacht werden.</b>`, "Endgültig löschen",
-    async () => { const r = await api("purge", { kind, id: x.id }); delete UI.sel[UI.view]; return r.message; }, true);
+  const fxHtml = fx.length ? `<br>• ${fx.join("<br>• ")}` : "";
+  const hard = async () => { const r = await api("purge", { kind, id: x.id }); delete UI.sel[UI.view]; return r.message; };
+  const soft = SOFT_DELETE[kind];
+  const used = (kind === "customer" || kind === "model") && fx.length;
+  const blocked = kind === "order" && x.status === "ausgeliefert"
+    ? "Die Bestellung ist bereits ausgeliefert. Sauber löschen geht erst, wenn der Verkauf gelöscht ist." : "";
+  const softText = {
+    offer: "Das Angebot wird gelöscht." + (x.orderId ? " Die daraus entstandene Bestellung bleibt erhalten." : ""),
+    order: "Die Bestellung wird gelöscht." + (x.status === "eingetroffen" ? " Ein bestelltes Fahrzeug wird wieder aus dem Bestand genommen, ein Bestandsfahrzeug freigegeben." : "")
+      + (S.offers.some(o => o.orderId === x.id) ? " Das zugehörige Angebot steht danach wieder auf „Offen“." : ""),
+    sale: "Der Verkauf wird gelöscht." + (x.status === "ok" ? " Vorher wird er storniert: Die Buchung wird zurückgenommen, das Fahrzeug geht zurück in den Bestand bzw. ist wieder für den Besteller reserviert, eine verrechnete Inzahlungnahme ist wieder offen." : ""),
+    customer: "Der Kunde wird gelöscht.", model: "Das Modell wird gelöscht.",
+  }[kind];
+  const hardText = `Endgültig löschen entfernt den Eintrag ohne Rücksicht auf den Status. Es wird nichts zurückgebucht und kein Status angepasst.${fxHtml}`;
+
+  let body, buttons;
+  if (!soft) {                                          // kein Ablauf vorhanden: direkt endgültig
+    body = `<b>${label}${name}</b> wird endgültig gelöscht. ${hardText}`;
+    buttons = `<button class="btn dangerBtn" id="hardBtn">Löschen</button>`;
+  } else if (used) {                                    // Kunde/Modell mit Vorgängen: Wahl
+    body = `<b>${label}${name}</b> wird noch verwendet:${fxHtml}<br><br><b>Deaktivieren</b> blendet den Eintrag aus, alle Vorgänge und die Historie bleiben erhalten. ` +
+      `<b>Endgültig löschen</b> entfernt ihn mitsamt den genannten Vorgängen.`;
+    buttons = `<button class="btn" id="softBtn">Nur deaktivieren</button><button class="btn dangerBtn" id="hardBtn">Endgültig löschen</button>`;
+  } else if (blocked) {
+    body = `<b>${label}${name}</b>: ${blocked}<br><br>${hardText}`;
+    buttons = `<button class="btn dangerBtn" id="hardBtn">Trotzdem endgültig löschen</button>`;
+  } else {
+    body = `<b>${label}${name}</b> löschen? ${softText}`;
+    buttons = `<button class="btn dangerBtn" id="softBtn">Löschen</button>`;
+  }
+  modal(`<h2>${esc(what.replace(/^(ein|eine|einen) /, ""))} löschen</h2><p class="sub">${body}<br><br><b>Das kann nicht rückgängig gemacht werden.</b></p>
+    <p class="err" id="err" role="alert"></p><div id="hardOffer" hidden><p class="sub">${hardText}</p></div>
+    <div class="actions"><button class="btn" data-a="close">Abbrechen</button>${buttons}</div>`);
+  const run = async (fn, btnEl) => {
+    btnEl.disabled = true;
+    try { const m = await fn(); close(); render(); if (m) toast(m); }
+    catch (e) {
+      $("#err").textContent = e.message; btnEl.disabled = false;
+      if (btnEl.id === "softBtn" && !$("#hardBtn")) {     // sauberes Löschen ging nicht -> endgültig anbieten
+        $("#hardOffer").hidden = false; btnEl.remove();
+        $(".modal .actions").insertAdjacentHTML("beforeend", `<button class="btn dangerBtn" id="hardBtn">Trotzdem endgültig löschen</button>`);
+        $("#hardBtn").onclick = () => run(hard, $("#hardBtn"));
+      }
+    }
+  };
+  if ($("#softBtn")) $("#softBtn").onclick = () => run(async () => done(await api(soft, { id: x.id })), $("#softBtn"));
+  if ($("#hardBtn")) $("#hardBtn").onclick = () => run(hard, $("#hardBtn"));
 }
 function wipeDialog() {
   const c = { v: S.vehicles.length, k: S.customers.length, s: S.sales.length, o: S.orders.length, a: S.offers.length, p: S.purchases.length };
@@ -830,7 +877,6 @@ const ACTIONS = {
   mNew: () => modelDialog(null),
   mEdit: () => { const m = selected("models", "ein Modell"); m && modelDialog(m); },
   mOrderRow: () => { const m = selected("models", "ein Modell"); m && orderDialog(null, { modelId: m.id }); },
-  mDel: () => { const m = selected("models", "ein Modell"); m && ask("Modell löschen", `${esc(m.model)} – ${esc(m.make)} löschen? Wird das Modell noch verwendet, wird es nur deaktiviert.`, "Löschen", async () => done(await api("deleteModel", { id: m.id }))); },
   cDel: () => { const c = selected("customers", "einen Kunden"); c && ask("Kunde löschen", `${esc(c.name)} löschen? Hat der Kunde schon Vorgänge, wird er nur deaktiviert.`, "Löschen", async () => done(await api("deleteCustomer", { id: c.id }))); },
   cfToggle: () => { UI.cfOpen = !UI.cfOpen; render(); if (UI.cfOpen) $("#cf_make")?.focus(); },
   cfReset: () => { UI.cf = { ...CAT_FILTER }; render(); },
@@ -838,10 +884,8 @@ const ACTIONS = {
   aNew: () => offerDialog(null),
   aEdit: () => { const o = selected("offers", "ein Angebot"); if (!o) return; if (o.status === "bestellt") return toast("Das Angebot ist bereits bestellt und kann nicht mehr geändert werden."); offerDialog(o); },
   aDoc: () => { const o = selected("offers", "ein Angebot"); o && contractOffer(o); },
-  aDel: () => { const o = selected("offers", "ein Angebot"); o && ask("Angebot löschen", `Angebot ${o.nr} für ${esc(custName(o.customerId))} endgültig löschen?` + (o.orderId ? " Die daraus entstandene Bestellung bleibt erhalten." : ""), "Löschen", async () => done(await api("deleteOffer", { id: o.id }))); },
   oDel: () => { const o = selected("orders", "eine Bestellung"); o && ask("Bestellung löschen", `Bestellung ${o.nr} endgültig löschen?` + (o.status === "eingetroffen" ? " Ein bestelltes Fahrzeug wird wieder aus dem Bestand genommen, ein Bestandsfahrzeug wird freigegeben." : "") + (S.offers.some(x => x.orderId === o.id) ? " Das zugehörige Angebot wird wieder auf „Offen“ gesetzt." : ""), "Löschen", async () => done(await api("deleteOrder", { id: o.id }))); },
-  kDel: () => { const s = selected("sales", "einen Verkauf"); s && ask("Verkauf löschen", `Verkauf ${s.nr} endgültig löschen?` + (s.status === "ok" ? " Der Verkauf wird dabei storniert: Buchung wird zurückgenommen, das Fahrzeug geht zurück in den Bestand." : ""), "Löschen", async () => done(await api("deleteSale", { id: s.id }))); },
-  purge: () => adminPurge(),
+  del: () => deleteDialog(),
   resetLogo: () => ask("Standardlogo wiederherstellen", "Das hochgeladene Logo wird entfernt und das mitgelieferte Logo wieder verwendet.", "Wiederherstellen",
     async () => done(await api("resetLogo", {}))),
   wipe: () => wipeDialog(),
