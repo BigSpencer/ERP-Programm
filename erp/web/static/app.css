@@ -227,3 +227,11 @@ select.rowStatus.st-angekauft, select.rowStatus.st-verrechnet { color: var(--pos
 .btn.dangerBtn:hover { background: #f07d76; border-color: #f07d76; color: #fff; }
 .card.danger-zone { border-color: #6b2f2b; border-top: 2px solid var(--neg); }
 .card.danger-zone b { color: var(--neg); }
+
+/* Logo-Upload in den Firmendaten */
+.logoRow { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; margin-top: 12px; }
+.logoPreview { width: 110px; height: 110px; object-fit: contain; border-radius: 6px; padding: 8px;
+  background: repeating-conic-gradient(var(--surface-2) 0% 25%, var(--bg) 0% 50%) 50% / 16px 16px; border: 1px solid var(--border); }
+.logoBtns { display: flex; flex-wrap: wrap; gap: 8px; }
+.fileBtn { display: inline-flex; align-items: center; }
+.loginLogo, .sideLogo { object-fit: contain; }

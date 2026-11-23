@@ -215,3 +215,26 @@ def test_purge_and_wipe_admin_only(client):
     login(client, "vk", "vk")
     do(client, "purge", {"kind": "customer", "id": "1"}, 403)
     do(client, "wipe", {"password": "vk", "confirmation": "LÖSCHEN"}, 403)
+
+
+def test_logo_upload_keeps_original_bytes(client):
+    import base64
+    import io
+    Image = pytest.importorskip("PIL.Image")
+    buf = io.BytesIO()
+    Image.new("RGBA", (600, 600), (201, 162, 77, 0)).save(buf, "PNG")    # transparentes PNG
+    raw = buf.getvalue()
+    assert client.get("/logo").status_code == 200                        # Standardlogo, auch ohne Anmeldung
+    login(client)
+    client.post("/api/password", json={"old": "admin", "new": "geheim123"})
+    do(client, "uploadLogo", {"data": "data:image/png;base64," + base64.b64encode(b"kein Bild").decode()}, 400)
+    do(client, "uploadLogo", {"data": "data:image/svg+xml;base64,PHN2Zz4="}, 400)
+    do(client, "uploadLogo", {"data": "data:image/png;base64," + base64.b64encode(raw).decode()})
+    st = client.get("/api/state").json()
+    v = st["settings"]["logoVersion"]
+    assert st["settings"]["customLogo"] and v != "standard"
+    r = client.get(f"/logo?v={v}")
+    assert r.content == raw and r.headers["content-type"] == "image/png" and "immutable" in r.headers["cache-control"]
+    assert f"/logo?v={v}" in client.get("/").text
+    do(client, "resetLogo", {})
+    assert client.get("/api/state").json()["settings"]["logoVersion"] == "standard"

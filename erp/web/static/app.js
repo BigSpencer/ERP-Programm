@@ -135,6 +135,9 @@ function renderNav() {
   $("#nav").innerHTML = h;
   setBrand("#brandTop", "#brandSub");
   document.title = S.settings.company + " · ERP";
+  const logoUrl = "/logo?v=" + encodeURIComponent(S.settings.logoVersion);
+  document.querySelectorAll("img.loginLogo, img.sideLogo").forEach(i => { if (!i.src.endsWith(logoUrl)) i.src = logoUrl; });
+  const fav = $("#favicon"); if (fav && !fav.href.endsWith(logoUrl)) fav.href = logoUrl;
   $("#who").innerHTML = `<span>Angemeldet als</span><b>${esc(S.me.fullName || S.me.username)}</b><span>${esc(S.me.roleName)}</span>
     <div class="links"><button data-a="pw">Passwort ändern</button><button data-a="logout">Abmelden</button></div>
     <span class="ver" title="Programmversion">Version ${esc(S.version)}</span>`;
@@ -386,6 +389,13 @@ function einstellungen() {
     `<form class="settings" id="setForm"><div class="card form">
       <label class="full">Firmenname<input id="setCompany" value="${esc(S.settings.company)}"></label>
       <div class="sec"><button class="btn primary" type="submit">Speichern</button></div></div></form>
+    <div class="settings"><div class="card logoCard">
+      <b>Logo</b>
+      <p>Erscheint im Anmeldefenster, in der Seitenleiste und als Symbol im Browser-Tab. Am besten ein PNG mit transparentem Hintergrund,
+      quadratisch und mindestens 512 × 512 Pixel (höchstens 4 MB). Das Bild wird unverändert in voller Auflösung verwendet.</p>
+      <div class="logoRow"><img class="logoPreview" src="/logo?v=${encodeURIComponent(S.settings.logoVersion)}" alt="Aktuelles Logo">
+        <div class="logoBtns"><label class="btn primary fileBtn">Logo hochladen …<input type="file" id="logoFile" accept="image/png,image/jpeg,image/webp" hidden></label>
+        ${S.settings.customLogo ? btn("resetLogo", "Standardlogo wiederherstellen") : ""}</div></div></div></div>
     <div class="settings"><div class="card danger-zone">
       <b>Gefahrenbereich: Datenbank bereinigen</b>
       <p>Entfernt alle Fahrzeuge, Kunden, Angebote, Bestellungen, Verkäufe, Ankäufe und Buchungen, zum Beispiel nach einer Testphase oder zum Neustart.
@@ -582,6 +592,16 @@ function deliverDialog(o) {
       UI.sel.verkauf = r.id; location.hash = "verkauf"; return r.message;
     } });
 }
+/* Logo hochladen (Administratoren) – die Datei wird unverändert übertragen */
+function uploadLogo(file) {
+  if (!/^image\/(png|jpeg|webp)$/.test(file.type)) return toast("Bitte ein Bild im Format PNG, JPG oder WebP wählen.");
+  if (file.size > 4 * 1024 * 1024) return toast("Das Bild ist zu groß (höchstens 4 MB).");
+  const r = new FileReader();
+  r.onload = () => act(() => api("uploadLogo", { data: r.result }));
+  r.onerror = () => toast("Die Datei konnte nicht gelesen werden.");
+  r.readAsDataURL(file);
+}
+
 /* Administratoren: Eintrag endgültig löschen (ohne Statusprüfung, ohne Rückbuchung) */
 const PURGE_KIND = { bestand: ["vehicle", "vehicles", "ein Fahrzeug"], ausstellung: ["vehicle", "vehicles", "ein Fahrzeug"], angebote: ["offer", "offers", "ein Angebot"],
   bestellungen: ["order", "orders", "eine Bestellung"], verkauf: ["sale", "sales", "einen Verkauf"], ankauf: ["purchase", "purchases", "einen Ankauf"],
@@ -805,6 +825,8 @@ const ACTIONS = {
   oDel: () => { const o = selected("orders", "eine Bestellung"); o && ask("Bestellung löschen", `Bestellung ${o.nr} endgültig löschen?` + (o.status === "eingetroffen" ? " Ein bestelltes Fahrzeug wird wieder aus dem Bestand genommen, ein Bestandsfahrzeug wird freigegeben." : "") + (S.offers.some(x => x.orderId === o.id) ? " Das zugehörige Angebot wird wieder auf „Offen“ gesetzt." : ""), "Löschen", async () => done(await api("deleteOrder", { id: o.id }))); },
   kDel: () => { const s = selected("sales", "einen Verkauf"); s && ask("Verkauf löschen", `Verkauf ${s.nr} endgültig löschen?` + (s.status === "ok" ? " Der Verkauf wird dabei storniert: Buchung wird zurückgenommen, das Fahrzeug geht zurück in den Bestand." : ""), "Löschen", async () => done(await api("deleteSale", { id: s.id }))); },
   purge: () => adminPurge(),
+  resetLogo: () => ask("Standardlogo wiederherstellen", "Das hochgeladene Logo wird entfernt und das mitgelieferte Logo wieder verwendet.", "Wiederherstellen",
+    async () => done(await api("resetLogo", {}))),
   wipe: () => wipeDialog(),
   uNew: () => userDialog(null),
   uEdit: () => { const u = selected("users", "einen Benutzer"); u && userDialog(u); },
@@ -838,6 +860,7 @@ document.addEventListener("change", e => {
   if (t.id === "fOffer") { UI.filter.offer = t.value; render(); }
   if (t.id === "fPurchase") { UI.filter.purchase = t.value; render(); }
   if (t.classList.contains("rowStatus")) changeStatus(t.dataset.kind, t.dataset.id, t.value);
+  if (t.id === "logoFile" && t.files[0]) uploadLogo(t.files[0]);
 });
 document.addEventListener("submit", async e => {
   if (e.target.id !== "setForm") return;

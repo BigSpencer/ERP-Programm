@@ -17,6 +17,7 @@ gemeinsamen Service-Schicht und gelten damit identisch für Desktop und Web.
 from __future__ import annotations
 
 import datetime as dt
+import base64
 import hashlib
 import logging
 import os
@@ -30,7 +31,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
@@ -127,7 +128,8 @@ def state(s, user: m.User) -> dict:
     data = {
         "version": f"{__version__} · {asset_version()[:7]}",
         "me": me(s, user),
-        "settings": {"company": get_setting(s, "company_name"), "seller": user.full_name or user.username},
+        "settings": {"company": get_setting(s, "company_name"), "seller": user.full_name or user.username,
+                     "logoVersion": logo_version(s), "customLogo": bool(get_setting(s, "logo_data"))},
         "models": [{"id": _s(x.id), "nr": x.number, "make": x.make, "model": x.model, "cat": x.category,
                     "ek": _f(x.purchase_price), "vk": _f(x.sales_price), "active": x.active}
                    for x in s.scalars(select(m.VehicleModel))],
@@ -471,6 +473,49 @@ def asset_version() -> str:
     return h.hexdigest()[:12]
 
 
+# --------------------------------------------------------------------------
+# Logo (vom Administrator hochgeladen, unverändert in der Datenbank gespeichert –
+# das Dateisystem bei Render ist nicht dauerhaft)
+# --------------------------------------------------------------------------
+
+LOGO_TYPES = {"image/png": (b"\x89PNG\r\n\x1a\n",), "image/jpeg": (b"\xff\xd8\xff",), "image/webp": (b"RIFF",)}
+LOGO_MAX_BYTES = 4 * 1024 * 1024
+
+
+def logo_version(s) -> str:
+    return get_setting(s, "logo_version") or "standard"
+
+
+def a_upload_logo(s, b):
+    data_url = b.get("data") or ""
+    if not data_url.startswith("data:") or ";base64," not in data_url:
+        raise BusinessError("Bitte eine Bilddatei auswählen")
+    mime, payload = data_url[5:].split(";base64,", 1)
+    if mime not in LOGO_TYPES:
+        raise BusinessError("Bitte ein Bild im Format PNG, JPG oder WebP hochladen")
+    try:
+        raw = base64.b64decode(payload, validate=True)
+    except ValueError as exc:
+        raise BusinessError("Die Bilddatei ist beschädigt") from exc
+    if len(raw) > LOGO_MAX_BYTES:
+        raise BusinessError("Das Bild ist zu groß (höchstens 4 MB)")
+    if not any(raw.startswith(sig) for sig in LOGO_TYPES[mime]) or (mime == "image/webp" and raw[8:12] != b"WEBP"):
+        raise BusinessError("Die Datei ist kein gültiges Bild")
+    set_setting(s, "logo_data", base64.b64encode(raw).decode("ascii"))
+    set_setting(s, "logo_mime", mime)
+    set_setting(s, "logo_version", hashlib.sha256(raw).hexdigest()[:12])
+    return {"message": "Logo gespeichert"}
+
+
+def a_reset_logo(s, b):
+    for key in ("logo_data", "logo_mime", "logo_version"):
+        set_setting(s, key, "")
+    return {"message": "Standardlogo wiederhergestellt"}
+
+
+ACTIONS.update({"uploadLogo": ("admin", a_upload_logo), "resetLogo": ("admin", a_reset_logo)})
+
+
 @lru_cache(maxsize=1)
 def index_html() -> str:
     v = asset_version()
@@ -637,7 +682,25 @@ def create_app(url: str | None = None) -> FastAPI:
 
     @app.get("/")
     def index():
-        return HTMLResponse(index_html(), headers={"Cache-Control": "no-cache"})
+        def do(s):
+            return index_html().replace("LOGOVERSION", logo_version(s))
+        html = with_session(do)
+        if not isinstance(html, str):       # Datenbank nicht erreichbar: Seite trotzdem ausliefern
+            html = index_html().replace("LOGOVERSION", "standard")
+        return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
+
+    @app.get("/logo")
+    def logo(request: Request):
+        def do(s):
+            return get_setting(s, "logo_data"), get_setting(s, "logo_mime"), logo_version(s)
+        res = with_session(do)
+        data, mime, version = res if isinstance(res, tuple) else ("", "", "standard")
+        cache = ("public, max-age=31536000, immutable" if request.query_params.get("v") == version
+                 else "no-cache")
+        if data:
+            return Response(base64.b64decode(data), media_type=mime or "image/png",
+                            headers={"Cache-Control": cache, "Content-Security-Policy": "default-src 'none'"})
+        return FileResponse(STATIC / "logo.png", headers={"Cache-Control": cache})
 
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
     return app
