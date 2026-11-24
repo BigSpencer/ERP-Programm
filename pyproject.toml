@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "erp-desk"
-version = "1.0.0"
+version = "2.1.3"
 description = "Modulares ERP-System (Stammdaten, Vertrieb, Einkauf, Lager, Finanzen) als Desktop-Client mit gemeinsamer Datenbank"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -16,7 +16,8 @@ dependencies = [
 
 [project.optional-dependencies]
 mysql = ["PyMySQL>=1.1"]
-dev = ["pytest>=8", "pyinstaller>=6"]
+dev = ["pytest>=8", "pyinstaller>=6", "httpx>=0.27"]
+web = ["fastapi>=0.110", "uvicorn[standard]>=0.29", "itsdangerous>=2.1"]
 
 [project.gui-scripts]
 erp-desk = "erp.__main__:run"

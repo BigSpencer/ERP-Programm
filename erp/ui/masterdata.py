@@ -110,8 +110,18 @@ class CustomersPage(MasterDataPage):
     entity, noun = "customer", "Kunde"
     columns = ["Nr.", "Name", "PLZ", "Ort", "Land", "E-Mail", "Telefon", "Kreditlimit", "Aktiv"]
 
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.add_button("Fahrzeughistorie", self.history)
+
+    def history(self):
+        sel = self.require_selection()
+        if sel:
+            from .dealer import CustomerHistoryDialog
+            CustomerHistoryDialog(self, sel).exec()
+
     def fields(self, s):
-        return PARTNER_FIELDS + [Field("credit_limit", "Kreditlimit EUR (0 = keins)", "money"),
+        return PARTNER_FIELDS + [Field("credit_limit", "Kreditlimit in $ (0 = keins)", "money"),
                                  Field("notes", "Notizen", "multiline"),
                                  Field("active", "Aktiv", "bool")]
 

@@ -14,6 +14,7 @@ ENTITIES = {
     "product": m.Product,
     "warehouse": m.Warehouse,
     "account": m.Account,
+    "vehicle_model": m.VehicleModel,
 }
 
 DECIMAL_FIELDS = {"credit_limit", "sales_price", "purchase_price", "tax_rate", "min_stock"}

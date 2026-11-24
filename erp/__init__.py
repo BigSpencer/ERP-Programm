@@ -2,5 +2,5 @@
 Lager, Finanzbuchhaltung) als lokal installierte Desktop-Anwendung mit
 gemeinsamer zentraler Datenbank."""
 
-__version__ = "1.0.0"
+__version__ = "2.1.3"
 APP_NAME = "ERP Desk"

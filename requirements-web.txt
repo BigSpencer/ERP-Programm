@@ -1,0 +1,6 @@
+# Abhängigkeiten der Web-Version (ohne Desktop-Oberfläche)
+SQLAlchemy>=2.0
+psycopg2-binary>=2.9
+fastapi>=0.110
+uvicorn[standard]>=0.29
+itsdangerous>=2.1

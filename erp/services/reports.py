@@ -13,9 +13,9 @@ from . import finance, get_setting, inventory
 
 
 def money(value) -> str:
+    """Geldbetrag im amerikanischen Format: 120,000.00 (Währungszeichen setzt der Aufrufer)."""
     v = Decimal(value or 0).quantize(Decimal("0.01"))
-    s = f"{v:,.2f}"
-    return s.replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"{v:,.2f}"
 
 
 def kpis(s: Session) -> dict:
@@ -83,7 +83,7 @@ def _doc_html(s: Session, title: str, number: str, date: dt.date, partner, items
 {rows}
 <tr><td colspan="5" align="right">Nettobetrag</td><td align="right">{money(net)}</td></tr>
 <tr><td colspan="5" align="right">Umsatzsteuer</td><td align="right">{money(tax)}</td></tr>
-<tr><td colspan="5" align="right"><b>Gesamtbetrag EUR</b></td><td align="right"><b>{money(gross)}</b></td></tr>
+<tr><td colspan="5" align="right"><b>Gesamtbetrag $</b></td><td align="right"><b>{money(gross)}</b></td></tr>
 </table>
 <p style="font-size:8pt">USt-IdNr.: {e(get_setting(s, 'company_vat_id'))} · IBAN: {e(get_setting(s, 'company_iban'))}</p>
 </body></html>"""

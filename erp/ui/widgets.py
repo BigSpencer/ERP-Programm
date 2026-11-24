@@ -132,10 +132,12 @@ class DateField(QDateEdit):
 class Field:
     """Beschreibung eines Formularfelds."""
 
-    def __init__(self, key, label, kind="text", options=None, required=False, readonly=False):
+    def __init__(self, key, label, kind="text", options=None, required=False, readonly=False,
+                 maximum=10_000, hint=""):
         self.key, self.label, self.kind = key, label, kind
         self.options = options or []
         self.required, self.readonly = required, readonly
+        self.maximum, self.hint = maximum, hint
 
 
 class FormDialog(QDialog):
@@ -170,7 +172,8 @@ class FormDialog(QDialog):
             w.setChecked(True if value is None else bool(value))
         elif f.kind == "int":
             w = QSpinBox()
-            w.setRange(0, 10_000)
+            w.setRange(0, f.maximum)
+            w.setGroupSeparatorShown(f.maximum > 10_000)
             w.setValue(int(value or 0))
         elif f.kind == "choice":
             w = SearchCombo(f.options, allow_empty=not f.required)
@@ -178,6 +181,8 @@ class FormDialog(QDialog):
                 w.set_value(value)
         elif f.kind == "date":
             w = DateField(value)
+        elif f.kind == "optdate":
+            w = DateField(value, optional=True)
         elif f.kind == "password":
             w = QLineEdit()
             w.setEchoMode(QLineEdit.EchoMode.Password)
@@ -189,6 +194,8 @@ class FormDialog(QDialog):
             w = QLineEdit("" if value is None else str(value))
             if f.kind in ("money", "decimal"):
                 w.setAlignment(Qt.AlignmentFlag.AlignRight)
+            if f.hint:
+                w.setPlaceholderText(f.hint)
         if f.readonly:
             w.setEnabled(False)
         return w
@@ -297,6 +304,7 @@ class ListPage(QWidget):
         self.search = QLineEdit()
         self.search.setPlaceholderText("Suchen …")
         self.search.setClearButtonEnabled(True)
+        self.search.setMinimumWidth(160)
         self.search.setMaximumWidth(260)
         self._search_timer = QTimer(self, singleShot=True, interval=300)
         self._search_timer.timeout.connect(self.refresh)

@@ -50,6 +50,14 @@ ROLES = {
 # Welche Rollen welches Modul nutzen dürfen (admin darf alles)
 MODULE_ROLES = {
     "dashboard": set(ROLES),
+    "cockpit": set(ROLES),
+    "vehicles": {"sales", "purchasing", "warehouse"},
+    "showroom": {"sales", "warehouse"},
+    "vehicle_models": {"sales", "purchasing"},
+    "offers": {"sales"},
+    "vehicle_orders": {"sales", "purchasing"},
+    "vehicle_sales": {"sales", "accounting"},
+    "used_purchases": {"sales", "purchasing", "accounting"},
     "customers": {"sales", "accounting"},
     "suppliers": {"purchasing", "accounting"},
     "products": {"sales", "purchasing", "warehouse"},
@@ -58,7 +66,22 @@ MODULE_ROLES = {
     "purchasing": {"purchasing"},
     "inventory": {"warehouse", "purchasing"},
     "finance": {"accounting"},
+    "employees": set(),
     "admin": set(),
+}
+
+# Bereiche der Web-Oberfläche, die einer Rolle zugewiesen werden können
+WEB_MODULES = {
+    "cockpit": "Cockpit",
+    "vehicles": "Fahrzeugbestand",
+    "showroom": "Ausstellung",
+    "offers": "Angebote",
+    "vehicle_orders": "Bestellungen",
+    "vehicle_sales": "Verkauf",
+    "used_purchases": "Gebrauchtwagen-Ankauf",
+    "customers": "Kunden",
+    "vehicle_models": "Fahrzeugkatalog",
+    "employees": "Mitarbeiter & Statistiken",
 }
 
 
@@ -68,11 +91,37 @@ class User(Versioned, Base):
     username: Mapped[str] = mapped_column(String(50), unique=True)
     full_name: Mapped[str] = mapped_column(String(120), default="")
     password_hash: Mapped[str] = mapped_column(String(200))
-    role: Mapped[str] = mapped_column(String(20), default="sales")
+    role: Mapped[str] = mapped_column(String(20), default="sales")      # Hauptrolle ("admin" bei Administratoren)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Ab Version 2.0: mehrere Rollen je Mitarbeiter (Rollenschlüssel, kommagetrennt)
+    roles: Mapped[str | None] = mapped_column(Text, nullable=True, default="")
+
+    @property
+    def role_keys(self) -> list[str]:
+        keys = [k for k in (self.roles or "").split(",") if k]
+        return keys or [self.role]
+
+    @property
+    def is_admin(self) -> bool:
+        return "admin" in self.role_keys or self.role == "admin"
 
     def may(self, module: str) -> bool:
-        return self.role == "admin" or self.role in MODULE_ROLES.get(module, set())
+        """Statische Rechteprüfung (Desktop). Die Web-Version nutzt die Rollen aus der Datenbank."""
+        return self.is_admin or any(k in MODULE_ROLES.get(module, set()) for k in self.role_keys)
+
+
+class Role(Versioned, Base):
+    """Rolle mit den Bereichen, die sie sehen und bearbeiten darf (Web-Version)."""
+    __tablename__ = "roles"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    key: Mapped[str] = mapped_column(String(40), unique=True)
+    name: Mapped[str] = mapped_column(String(80))
+    modules: Mapped[str] = mapped_column(Text, default="")              # kommagetrennt, siehe WEB_MODULES
+    builtin: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    @property
+    def module_list(self) -> list[str]:
+        return [x for x in (self.modules or "").split(",") if x]
 
 
 class Setting(Base):
@@ -398,3 +447,243 @@ class JournalLine(Base):
 
     entry: Mapped[JournalEntry] = relationship(back_populates="lines")
     account: Mapped[Account] = relationship()
+
+
+# --------------------------------------------------------------------------
+# Autohaus: Fahrzeugkatalog, Bestand, Ausstellung, Bestellungen, Verkauf, Ankauf
+# --------------------------------------------------------------------------
+#
+# Fahrzeugpreise werden – wie im Fahrzeughandel üblich – als Bruttobeträge
+# (inkl. USt) geführt. Die Steueraufteilung erfolgt erst bei der Buchung.
+
+VEHICLE_CATEGORIES = [
+    "Kompakt", "Limousine", "Coupé", "Cabrio", "Sportwagen", "Supersportwagen",
+    "SUV", "Geländewagen", "Muscle Car", "Klassiker", "Van", "Transporter",
+    "Motorrad", "Sonstige",
+]
+
+VEHICLE_CONDITION = {"new": "Neu", "used": "Gebraucht"}
+
+VEHICLE_STATUS = {
+    "stock": "Lager",
+    "showroom": "Ausstellung",
+    "reserved": "Reserviert",
+    "sold": "Verkauft",
+    "removed": "Ausgebucht",
+    "pending": "Inzahlungnahme offen",   # erfasst, wird erst mit einem Fahrzeugverkauf übernommen
+}
+# Status, in denen ein Fahrzeug verkauft werden kann
+VEHICLE_AVAILABLE = ("stock", "showroom", "reserved")
+
+VEHICLE_SOURCE = {
+    "order": "Bestellung",
+    "used_purchase": "Ankauf",
+    "trade_in": "Inzahlungnahme",
+    "manual": "Manuell",
+}
+
+PAYMENT_ACCOUNTS = {"1200": "Überweisung (Bank)", "1000": "Bar (Kasse)"}
+
+VEHICLE_ORDER_STATUS = {
+    "ordered": "Bestellt",
+    "arrived": "Eingetroffen",
+    "delivered": "Ausgeliefert",
+    "cancelled": "Storniert",
+}
+
+DEAL_STATUS = {"done": "Abgeschlossen", "cancelled": "Storniert"}
+
+# Gebrauchtwagen-Ankauf: normaler Ankauf (sofort bezahlt) oder Inzahlungnahme (mit einem Verkauf verrechnet)
+PURCHASE_STATUS = {"done": "Angekauft", "trade_in": "Inzahlungnahme", "settled": "Verrechnet",
+                   "cancelled": "Storniert"}
+
+OFFER_STATUS = {"open": "Offen", "declined": "Abgelehnt", "expired": "Abgelaufen", "ordered": "Bestellt"}
+
+
+class VehicleModel(Versioned, Base):
+    """Fahrzeugkatalog: Modelle mit Standard-Einkaufs- und -Verkaufspreis."""
+    __tablename__ = "vehicle_models"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    number: Mapped[str] = mapped_column(String(20), unique=True)
+    make: Mapped[str] = mapped_column(String(60))
+    model: Mapped[str] = mapped_column(String(80))
+    category: Mapped[str] = mapped_column(String(40), default="")
+    purchase_price: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"))
+    sales_price: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"))
+    default_supplier_id: Mapped[int | None] = mapped_column(ForeignKey("suppliers.id"))
+    notes: Mapped[str] = mapped_column(Text, default="")
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    default_supplier: Mapped[Supplier | None] = relationship()
+
+    @property
+    def name(self) -> str:
+        return f"{self.make} {self.model}".strip()
+
+    @property
+    def margin(self) -> Decimal:
+        return Decimal(self.sales_price or 0) - Decimal(self.purchase_price or 0)
+
+
+class Vehicle(Versioned, Base):
+    """Einzelnes Fahrzeug im Bestand (neu oder gebraucht)."""
+    __tablename__ = "vehicles"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    number: Mapped[str] = mapped_column(String(20), unique=True)
+    model_id: Mapped[int | None] = mapped_column(ForeignKey("vehicle_models.id"))
+    make: Mapped[str] = mapped_column(String(60))
+    model: Mapped[str] = mapped_column(String(80))
+    category: Mapped[str] = mapped_column(String(40), default="")
+    condition: Mapped[str] = mapped_column(String(10), default="new")
+    status: Mapped[str] = mapped_column(String(20), default="stock")
+    source: Mapped[str] = mapped_column(String(20), default="manual")
+    vin: Mapped[str] = mapped_column(String(40), default="")
+    plate: Mapped[str] = mapped_column(String(20), default="")
+    color: Mapped[str] = mapped_column(String(40), default="")
+    year: Mapped[int] = mapped_column(Integer, default=0)
+    mileage: Mapped[int] = mapped_column(Integer, default=0)
+    purchase_price: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"))
+    list_price: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"))
+    purchase_date: Mapped[dt.date] = mapped_column(Date, default=dt.date.today)
+    # Differenzbesteuerung (§25a UStG), z. B. bei Ankauf von Privatpersonen
+    margin_taxation: Mapped[bool] = mapped_column(Boolean, default=False)
+    location: Mapped[str] = mapped_column(String(40), default="")
+    showroom_since: Mapped[dt.date | None] = mapped_column(Date)
+    reserved_for_id: Mapped[int | None] = mapped_column(ForeignKey("customers.id"))
+    reserved_until: Mapped[dt.date | None] = mapped_column(Date)
+    notes: Mapped[str] = mapped_column(Text, default="")
+
+    model_ref: Mapped[VehicleModel | None] = relationship()
+    reserved_for: Mapped[Customer | None] = relationship()
+
+    @property
+    def name(self) -> str:
+        return f"{self.make} {self.model}".strip()
+
+    @property
+    def label(self) -> str:
+        extra = self.plate or self.vin
+        return f"{self.number} {self.name}" + (f" ({extra})" if extra else "")
+
+    @property
+    def margin(self) -> Decimal:
+        return Decimal(self.list_price or 0) - Decimal(self.purchase_price or 0)
+
+    @property
+    def days_in_stock(self) -> int:
+        return (dt.date.today() - self.purchase_date).days if self.purchase_date else 0
+
+
+class VehicleOrder(Versioned, Base):
+    """Fahrzeugbestellung beim Hersteller/Lieferanten – auf Lager oder für einen Kunden."""
+    __tablename__ = "vehicle_orders"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    number: Mapped[str] = mapped_column(String(20), unique=True)
+    model_id: Mapped[int] = mapped_column(ForeignKey("vehicle_models.id"))
+    supplier_id: Mapped[int | None] = mapped_column(ForeignKey("suppliers.id"))
+    customer_id: Mapped[int | None] = mapped_column(ForeignKey("customers.id"))
+    color: Mapped[str] = mapped_column(String(40), default="")
+    purchase_price: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"))
+    sales_price: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"))
+    deposit: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"))
+    order_date: Mapped[dt.date] = mapped_column(Date, default=dt.date.today)
+    expected_date: Mapped[dt.date | None] = mapped_column(Date)
+    arrival_date: Mapped[dt.date | None] = mapped_column(Date)
+    status: Mapped[str] = mapped_column(String(20), default="ordered")
+    vehicle_id: Mapped[int | None] = mapped_column(ForeignKey("vehicles.id"))
+    notes: Mapped[str] = mapped_column(Text, default="")
+    created_by: Mapped[str] = mapped_column(String(50), default="")
+
+    model: Mapped[VehicleModel] = relationship()
+    supplier: Mapped[Supplier | None] = relationship()
+    customer: Mapped[Customer | None] = relationship()
+    vehicle: Mapped[Vehicle | None] = relationship()
+
+
+class VehicleSale(Versioned, Base):
+    """Fahrzeugverkauf (Kaufvertrag), optional mit Inzahlungnahme."""
+    __tablename__ = "vehicle_sales"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    number: Mapped[str] = mapped_column(String(20), unique=True)
+    vehicle_id: Mapped[int] = mapped_column(ForeignKey("vehicles.id"))
+    customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id"))
+    sale_date: Mapped[dt.date] = mapped_column(Date, default=dt.date.today)
+    price: Mapped[Decimal] = mapped_column(Money)
+    purchase_price: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"))  # EK zum Verkaufszeitpunkt
+    tax_amount: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"))
+    trade_in_vehicle_id: Mapped[int | None] = mapped_column(ForeignKey("vehicles.id"))
+    trade_in_value: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"))
+    payment_account: Mapped[str] = mapped_column(String(10), default="1200")
+    status: Mapped[str] = mapped_column(String(20), default="done")
+    journal_entry_id: Mapped[int | None] = mapped_column(ForeignKey("journal_entries.id"))
+    salesperson: Mapped[str] = mapped_column(String(50), default="")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    # Ab Version 1.3: Verkauf aus einer Bestellung mit bereits geleisteter Anzahlung
+    order_id: Mapped[int | None] = mapped_column(ForeignKey("vehicle_orders.id"), nullable=True)
+    deposit: Mapped[Decimal | None] = mapped_column(Money, nullable=True, default=Decimal("0"))
+
+    vehicle: Mapped[Vehicle] = relationship(foreign_keys=[vehicle_id])
+    trade_in_vehicle: Mapped[Vehicle | None] = relationship(foreign_keys=[trade_in_vehicle_id])
+    customer: Mapped[Customer] = relationship()
+
+    @property
+    def margin(self) -> Decimal:
+        return Decimal(self.price) - Decimal(self.purchase_price or 0)
+
+    @property
+    def payment_amount(self) -> Decimal:
+        """Restzahlung bei Übergabe: Preis abzüglich Inzahlungnahme und Anzahlung."""
+        return Decimal(self.price) - Decimal(self.trade_in_value or 0) - Decimal(self.deposit or 0)
+
+
+class UsedPurchase(Versioned, Base):
+    """Gebrauchtwagen-Ankauf (Ankaufvertrag)."""
+    __tablename__ = "used_purchases"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    number: Mapped[str] = mapped_column(String(20), unique=True)
+    vehicle_id: Mapped[int] = mapped_column(ForeignKey("vehicles.id"))
+    customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id"))  # Verkäufer
+    purchase_date: Mapped[dt.date] = mapped_column(Date, default=dt.date.today)
+    price: Mapped[Decimal] = mapped_column(Money)
+    payment_account: Mapped[str] = mapped_column(String(10), default="1200")
+    status: Mapped[str] = mapped_column(String(20), default="done")
+    journal_entry_id: Mapped[int | None] = mapped_column(ForeignKey("journal_entries.id"))
+    buyer: Mapped[str] = mapped_column(String(50), default="")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    # Ab Version 1.4: Verkauf, mit dem eine Inzahlungnahme verrechnet wurde
+    sale_id: Mapped[int | None] = mapped_column(ForeignKey("vehicle_sales.id"), nullable=True)
+
+    vehicle: Mapped[Vehicle] = relationship()
+    customer: Mapped[Customer] = relationship()
+
+
+class Offer(Versioned, Base):
+    """Angebot an einen Kunden – für ein Katalogmodell oder ein Fahrzeug aus dem Bestand.
+
+    Ablauf: Angebot -> (Zahlung/Anzahlung) Bestellung -> (Übergabe, Restzahlung) Verkauf.
+    """
+    __tablename__ = "offers"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    number: Mapped[str] = mapped_column(String(20), unique=True)
+    customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id"))
+    model_id: Mapped[int | None] = mapped_column(ForeignKey("vehicle_models.id"))
+    vehicle_id: Mapped[int | None] = mapped_column(ForeignKey("vehicles.id"))
+    color: Mapped[str] = mapped_column(String(40), default="")
+    price: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"))
+    offer_date: Mapped[dt.date] = mapped_column(Date, default=dt.date.today)
+    valid_until: Mapped[dt.date | None] = mapped_column(Date)
+    status: Mapped[str] = mapped_column(String(20), default="open")
+    order_id: Mapped[int | None] = mapped_column(ForeignKey("vehicle_orders.id"))
+    notes: Mapped[str] = mapped_column(Text, default="")
+    created_by: Mapped[str] = mapped_column(String(50), default="")
+
+    customer: Mapped[Customer] = relationship()
+    model: Mapped[VehicleModel | None] = relationship()
+    vehicle: Mapped[Vehicle | None] = relationship()
+    order: Mapped[VehicleOrder | None] = relationship()
+
+    @property
+    def subject(self) -> str:
+        if self.vehicle is not None:
+            return self.vehicle.label
+        return self.model.name if self.model is not None else ""
