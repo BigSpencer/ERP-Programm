@@ -231,6 +231,25 @@ details.hist summary { font-weight: 600; min-height: 34px; display: flex; align-
 .room-type { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 .room-type > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .room-card .chip { justify-self: start; }
+.dev-ed { display: grid; gap: 8px; }
+.dev-list { display: grid; gap: 6px; }
+.dev-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 6px; align-items: center; }
+.dev-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.dev-add { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
+.dev-add input { min-width: 0; padding: 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); font-size: 16px; }
+.dev-add .btn { min-height: 44px; }
+.dev-sum { font-size: 14px; overflow-wrap: anywhere; }
+.card-toggle { display: flex; justify-content: space-between; align-items: center; gap: 8px; background: none; border: 0; padding: 0; min-height: 36px; text-align: left; }
+.tpl-devbtn { display: grid; justify-items: center; min-width: 54px; height: 44px; padding: 2px 6px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); font-size: 11px; color: var(--muted); }
+.tpl-devbtn .mono { font-size: 16px; color: var(--ink); line-height: 1.2; }
+.tpl-devbtn[aria-expanded="true"] { border-color: var(--accent); }
+.tpl-devs { display: grid; gap: 6px; padding: 10px; border-radius: 10px; border: 1px dashed var(--line); }
+.preset { display: grid; gap: 8px; }
+.preset-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.preset-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 4px; align-items: center; }
+.chip.static { cursor: default; justify-self: start; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.icon-btn { width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); font-size: 17px; }
+.icon-btn:disabled { opacity: .35; }
 .back { justify-self: start; background: none; border: 0; padding: 4px 0; color: var(--accent); font-weight: 600; min-height: 36px; }
 .plan-opt { width: 100%; text-align: left; background: none; border: 0; border-top: 1px solid var(--line); padding: 12px 2px; display: grid; gap: 6px; }
 .plan-opt[aria-current="true"] strong { color: var(--accent); }
@@ -289,9 +308,10 @@ details.hist summary { font-weight: 600; min-height: 34px; display: flex; align-
       <ul class="cards" id="date-list"></ul>
     </section>
 
-    <section class="view" id="view-more" aria-label="Mehr" hidden>
+    <section class="view" id="view-more" aria-label="Einstellungen" hidden>
       <div class="more">
         <div><strong id="me-name">Prüfer</strong><br><span class="muted" id="me-role"></span></div>
+        <div id="settings-presets"></div>
         <button class="btn block" id="new-plan-btn" type="button">Neuen Grundriss anlegen</button>
         <h3>So funktioniert es</h3>
         <ul>
@@ -310,7 +330,7 @@ details.hist summary { font-weight: 600; min-height: 34px; display: flex; align-
     <button type="button" data-view="plan" aria-current="page"><span class="ti" aria-hidden="true">▦</span>Grundriss</button>
     <button type="button" data-view="list"><span class="ti" aria-hidden="true">☰</span>Meine<span class="badge" id="badge-mine" hidden></span></button>
     <button type="button" data-view="dates"><span class="ti" aria-hidden="true">◷</span>Termine<span class="badge warn" id="badge-dates" hidden></span></button>
-    <button type="button" data-view="more"><span class="ti" aria-hidden="true">⋯</span>Mehr</button>
+    <button type="button" data-view="more"><span class="ti" aria-hidden="true">⚙</span>Einstellungen</button>
   </nav>
 </div>
 
@@ -343,6 +363,13 @@ const SPOT_NAMES = ["Arbeitsplatz", "Drucker", "Kopierer", "Teeküche", "Besprec
 const DEFECT_QUICK = ["Isolation beschädigt", "Stecker defekt", "Zuleitung gequetscht", "Prüfung nicht bestanden", "Gehäuse beschädigt"];
 const ABSENT_QUICK = ["Gerät nicht auffindbar", "Gerät in Benutzung", "Arbeitsplatz verschlossen", "Mitarbeiter abwesend"];
 const SPOT_COLORS = { open: "open", done: "done", defect: "clarify", absent: "partial" };
+// Schnellauswahl-Knöpfe – unter „Einstellungen“ für jeden Prüfer anpassbar
+const DEFAULT_PRESETS = {
+  spots: [...SPOT_NAMES],
+  devices: ["PC", "Monitor", "Notebook-Netzteil", "Dockingstation", "Tischleuchte", "Steckdosenleiste", "Telefon",
+    "Drucker", "Ladegerät", "Ventilator", "Kaffeemaschine", "Wasserkocher", "Kühlschrank"],
+};
+const PRESET_MAX = 30, NAME_MAX = 40;
 const CLARIFY_QUICK = ["Raum verschlossen", "Mitarbeiter abwesend", "Gerät in Benutzung / nicht abschaltbar",
   "Zugang nur mit Begleitung", "Gerät defekt – Rücksprache"];
 const GRID = 0.5, MIN = 0.5, HIST_MAX = 25;
@@ -352,6 +379,7 @@ const S = {
   db: null, user: null, me: { id: null, name: "" }, isEditor: false, canWrite: true,
   plans: [], areas: [], planId: null, names: {}, offline: false, live: false,
   view: "plan", listStatus: "todo", sel: null, sheet: null, edit: false,
+  presets: null, presetsShared: false,
 };
 const $ = (s) => document.querySelector(s);
 const NS = "http://www.w3.org/2000/svg";
@@ -406,7 +434,9 @@ function sampleData() {
     status, progress: status === "done" ? 100 : 0, date: null, note: "", notes: "", devices: 8, inspector: null, by: null, at: null, rev: 1, hist: [], ...extra });
   ["done", "done", "partial", "appointment", "open", "open"].forEach((s, i) => mk(`Büro 1.${i + 1}`, i * 6, 0, 6, 6, s,
     s === "partial" ? { progress: 60, note: "Kaffeeküche noch offen" } : s === "appointment" ? { date: iso(3), note: "Mitarbeiter im Urlaub" } : {}));
-  const sp = (names, states = []) => names.map((n, i) => ({ id: "vs" + a.length + "-" + i, name: n, devices: n.startsWith("Arbeitsplatz") ? 3 : 1,
+  const ws = () => [{ id: newId("d"), name: "PC", qty: 1 }, { id: newId("d"), name: "Monitor", qty: 2 }, { id: newId("d"), name: "Tischleuchte", qty: 1 }];
+  const sp = (names, states = []) => names.map((n, i) => ({ id: "vs" + a.length + "-" + i, name: n,
+    items: n.startsWith("Arbeitsplatz") ? ws() : [{ id: newId("d"), name: n, qty: 1 }], devices: n.startsWith("Arbeitsplatz") ? 4 : 1,
     status: states[i] || "open", note: states[i] === "defect" ? "Zuleitung gequetscht" : "", by: null, at: null }));
   a[2].spots = sp(["Arbeitsplatz 1", "Arbeitsplatz 2", "Arbeitsplatz 3", "Drucker", "Teeküche"], ["done", "done", "defect"]);
   a[2].progress = 60;
@@ -440,6 +470,7 @@ async function boot() {
     return;
   }
   subscribe();
+  watchPresets();
 }
 
 let loadTimer = null, gotPlans = false, gotAreas = false;
@@ -515,12 +546,115 @@ function statusPatch(cur, v) {
 }
 const mayChangeData = (d) => S.isEditor || !d.inspector || d.inspector === S.me.id;
 
+// ---------- Geräte an Prüfplätzen ----------
+/** Geräte eines Prüfplatzes: Liste {id, name, qty}. Ältere Plätze haben nur eine Zahl (devices). */
+const devCount = (s) => (Array.isArray(s.items) && s.items.length ? s.items.reduce((n, d) => n + (d.qty || 1), 0) : (s.items ? 0 : (s.devices || 0)));
+const devSummary = (items) => (items || []).map((d) => ((d.qty || 1) > 1 ? `${d.qty}× ${d.name}` : d.name)).join(", ");
+const cloneItems = (items) => (items || []).map((d) => ({ id: newId("d"), name: d.name, qty: d.qty || 1 }));
+
+/** Geräte-Editor: Direkteingabe oder Schnellauswahl, Anzahl je Gerät, entfernen. items wird direkt verändert. */
+function deviceEditor(items, onChange = () => {}, idp = "dv") {
+  const box = el("div", { class: "dev-ed" });
+  const draw = (focus = false) => {
+    box.replaceChildren();
+    const list = el("div", { class: "dev-list" });
+    items.forEach((d, i) => list.append(el("div", { class: "dev-row" },
+      el("span", { class: "dev-name" }, d.name),
+      stepper(d.qty || 1, 1, 99, (v) => { d.qty = v; onChange(); }, `Anzahl ${d.name}`),
+      el("button", { type: "button", class: "tpl-del", "aria-label": `${d.name} entfernen`, onclick: () => { items.splice(i, 1); draw(); onChange(); } }, "×"))));
+    if (!items.length) list.append(el("p", { class: "muted", style: { margin: 0, fontSize: "14px" } }, "Noch keine Geräte."));
+    const input = el("input", { id: `${idp}-in`, placeholder: "Gerät eingeben, z. B. Monitor", autocomplete: "off", enterkeyhint: "done", maxlength: NAME_MAX });
+    const add = (name, refocus) => {
+      name = String(name || "").trim().slice(0, NAME_MAX); if (!name) return;
+      const ex = items.find((x) => x.name.toLowerCase() === name.toLowerCase());
+      if (ex) ex.qty = Math.min(99, (ex.qty || 1) + 1); else items.push({ id: newId("d"), name, qty: 1 });
+      draw(refocus); onChange();
+    };
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); add(input.value, true); } });
+    box.append(list,
+      el("div", { class: "dev-add" }, input, el("button", { type: "button", class: "btn", onclick: () => add(input.value, true) }, "Hinzufügen")),
+      el("div", { class: "quick" }, presets().devices.map((n) => el("button", { type: "button", class: "chip", onclick: () => add(n) }, `＋ ${n}`))));
+    if (focus) input.focus();
+  };
+  draw();
+  return box;
+}
+
+// ---------- Persönliche Schnellauswahl (Einstellungen) ----------
+function normPresets(src) {
+  const norm = (arr, def) => {
+    if (!Array.isArray(arr)) return [...def];
+    const seen = new Set(), out = [];
+    for (const v of arr) { const n = String(v || "").trim().slice(0, NAME_MAX); if (n && !seen.has(n.toLowerCase())) { seen.add(n.toLowerCase()); out.push(n); } }
+    return out.slice(0, PRESET_MAX);
+  };
+  return { spots: norm(src?.spots, DEFAULT_PRESETS.spots), devices: norm(src?.devices, DEFAULT_PRESETS.devices) };
+}
+const presets = () => S.presets || (S.presets = normPresets(ls("presets")));
+const settingsRef = () => (S.db && S.me.id ? S.db.doc(`data/users/${S.me.id}/settings`) : null);
+function watchPresets() {
+  const ref = settingsRef(); if (!ref) return;
+  ref.onSnapshot((snap) => {
+    if (snap.exists && snap.data().presets) { S.presets = normPresets(snap.data().presets); ls("presets", S.presets); }
+    S.presetsShared = true;
+    if (S.view === "more") renderSettings();
+  }, () => { S.presetsShared = false; });
+}
+let presetSaving = false, presetPending = false;
+async function savePresets() {
+  ls("presets", presets());
+  const ref = settingsRef(); if (!ref || S.presetsShared === "local") return;
+  if (presetSaving) { presetPending = true; return; }
+  presetSaving = true;
+  try { await ref.set({ presets: presets() }); }
+  catch { S.presetsShared = "local"; renderSettings(); }
+  presetSaving = false;
+  if (presetPending) { presetPending = false; savePresets(); }
+}
+function presetEditor(key, title, hint) {
+  const list = presets()[key];
+  const box = el("section", { class: "preset" });
+  const err = el("p", { class: "err", role: "alert" });
+  const input = el("input", { id: `pr-${key}`, placeholder: key === "spots" ? "z. B. Empfang" : "z. B. Beamer", autocomplete: "off", enterkeyhint: "done", maxlength: NAME_MAX });
+  const change = (refocus) => { savePresets(); renderSettings(); if (refocus) $(`#pr-${key}`)?.focus(); };
+  const add = () => {
+    const n = input.value.trim().slice(0, NAME_MAX);
+    if (!n) return;
+    if (list.some((x) => x.toLowerCase() === n.toLowerCase())) { err.textContent = `„${n}“ ist schon vorhanden.`; return; }
+    if (list.length >= PRESET_MAX) { err.textContent = `Höchstens ${PRESET_MAX} Knöpfe.`; return; }
+    list.push(n); change(true);
+  };
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); add(); } });
+  input.addEventListener("input", () => { err.textContent = ""; });
+  const move = (i, d) => { const j = i + d; if (j < 0 || j >= list.length) return; [list[i], list[j]] = [list[j], list[i]]; change(); };
+  box.append(...[el("h3", {}, title), el("p", { class: "muted", style: { margin: 0, fontSize: "14px" } }, hint),
+    el("ul", { class: "preset-list" }, list.map((n, i) => el("li", { class: "preset-row" },
+      el("span", { class: "chip static" }, n),
+      el("button", { type: "button", class: "icon-btn", disabled: i === 0, "aria-label": `${n} nach vorne`, onclick: () => move(i, -1) }, "↑"),
+      el("button", { type: "button", class: "icon-btn", disabled: i === list.length - 1, "aria-label": `${n} nach hinten`, onclick: () => move(i, 1) }, "↓"),
+      el("button", { type: "button", class: "icon-btn", "aria-label": `${n} entfernen`, onclick: () => { list.splice(i, 1); change(); } }, "×")))),
+    !list.length ? el("p", { class: "muted", style: { margin: 0, fontSize: "14px" } }, "Keine Knöpfe – dann nur Direkteingabe.") : null,
+    el("div", { class: "dev-add" }, input, el("button", { type: "button", class: "btn", onclick: add }, "Hinzufügen")), err,
+    el("button", { type: "button", class: "chip", onclick: () => { presets()[key] = [...DEFAULT_PRESETS[key]]; change(); } }, "Standard wiederherstellen")].filter(Boolean));
+  return box;
+}
+function renderSettings() {
+  const box = $("#settings-presets"); if (!box) return;
+  const where = S.preview ? "Vorschau: Änderungen gelten nur in diesem Fenster."
+    : S.presetsShared === true ? "Gilt für Sie auf allen Geräten, mit denen Sie diese Prüfplanung öffnen. Kollegen haben ihre eigene Auswahl."
+    : "Wird nur auf diesem Gerät gespeichert.";
+  box.replaceChildren(el("div", { style: { display: "grid", gap: "14px" } },
+    el("p", { class: "muted", style: { margin: 0, fontSize: "14px" } }, where),
+    presetEditor("spots", "Schnellauswahl Prüfplätze", "Knöpfe beim Anlegen von Prüfplätzen (Arbeitsplätze, Drucker, Teeküche …)."),
+    presetEditor("devices", "Schnellauswahl Geräte", "Knöpfe beim Zuordnen von Geräten zu einem Prüfplatz.")));
+}
+
 // ---------- Prüfplätze ----------
 /** Zählt die Prüfplätze eines Raums. Geprüft = ohne oder mit Mangel geprüft. */
 function spotStats(a) {
   const s = a.spots || [];
   const c = { total: s.length, open: 0, done: 0, defect: 0, absent: 0, devices: 0 };
-  for (const x of s) { c[x.status] = (c[x.status] || 0) + 1; c.devices += x.devices || 0; }
+  for (const x of s) { c[x.status] = (c[x.status] || 0) + 1; c.devices += devCount(x); }
   c.checked = c.done + c.defect;
   c.pct = c.total ? Math.round(c.checked / c.total * 100) : 0;
   return c;
@@ -677,7 +811,7 @@ function render(fit = false) {
   renderSummary(); renderPlan(fit); renderBadges();
   if (S.view === "list") renderList();
   if (S.view === "dates") renderDates();
-  if (S.view === "more") renderMore();
+  if (S.view === "more") { renderMore(); renderSettings(); }
   if (S.sheet && !S.sheet.busy && (S.sheet.kind === "area" || S.sheet.kind === "spot")) {
     const a = S.areas.find((x) => x.id === S.sheet.id);
     const s = a && S.sheet.spot ? (a.spots || []).find((x) => x.id === S.sheet.spot) : null;
@@ -1013,7 +1147,7 @@ function spotSection(a, ok) {
         el("button", { type: "button", class: "spot-main", onclick: () => openSpot(a.id, s.id, false) },
           el("span", { class: `spot-ico si-${s.status}`, "aria-hidden": "true" }, SPOT[s.status].icon),
           el("span", { class: "spot-txt" }, el("span", { class: "spot-name" }, s.name),
-            el("span", { class: "spot-sub" }, [SPOT[s.status].label, s.devices ? `${s.devices} Gerät${s.devices > 1 ? "e" : ""}` : "", s.note].filter(Boolean).join(" · ")))),
+            el("span", { class: "spot-sub" }, [SPOT[s.status].label, s.items?.length ? devSummary(s.items) : devCount(s) ? `${devCount(s)} Gerät${devCount(s) > 1 ? "e" : ""}` : "", s.note].filter(Boolean).join(" · ")))),
         el("button", { type: "button", class: "spot-quick", disabled: !quickOk, "aria-label": `${s.name} als geprüft markieren`,
           onclick: () => quickSpot(a, s) }, "✔")));
     }
@@ -1052,7 +1186,7 @@ function spotSheet(a, s) {
   const ok = mayChange(a);
   const facts = el("dl", { class: "facts" });
   const f = (k, v) => v && facts.append(el("dt", {}, k), el("dd", {}, v));
-  f("Geräte", s.devices ? String(s.devices) : ""); f("Bemerkung", s.note);
+  f("Geräte", s.items?.length ? `${devCount(s)}: ${devSummary(s.items)}` : devCount(s) ? String(devCount(s)) : "keine eingetragen"); f("Bemerkung", s.note);
   f("Geändert", s.at ? `${s.by ? nameOf(s.by) : "—"}, ${fmtStamp(s.at)}` : "");
   const c = SPOT_COLORS;
   const act = (k, text, cls = "") => el("button", { type: "button", class: `act ${cls}`, disabled: !ok,
@@ -1070,7 +1204,7 @@ function spotSheet(a, s) {
     !ok && S.canWrite ? el("div", { class: "notice" }, `Dieser Raum ist ${nameOf(a.inspector)} zugewiesen.`) : null,
     el("div", { class: "actions" }, act("done", "✔ Geprüft", "wide"), act("defect", "✖ Mangel"), act("absent", "⊘ Nicht zugänglich"),
       act("open", "○ Offen", "wide")),
-    S.canWrite ? el("button", { type: "button", class: "btn block", onclick: () => editSpotSheet(a, s) }, "Prüfplatz bearbeiten") : null),
+    S.canWrite ? el("button", { type: "button", class: "btn block", onclick: () => editSpotSheet(a, s) }, "Prüfplatz und Geräte bearbeiten") : null),
     { id: a.id, spot: s.id });
 }
 function backToRoom(areaId) {
@@ -1103,41 +1237,93 @@ function spotNoteForm(a, s, key) {
 // ---------- Prüfplätze: anlegen und bearbeiten ----------
 function addSpotSheet(a) {
   const err = el("p", { class: "err", role: "alert" });
-  const name = el("input", { id: "as-name", value: "Arbeitsplatz", autocomplete: "off" });
-  const chips = SPOT_NAMES.map((n) => el("button", { type: "button", class: "chip", onclick: () => { name.value = n; } }, n));
+  const name = el("input", { id: "as-name", value: presets().spots[0] || "Arbeitsplatz", autocomplete: "off", maxlength: NAME_MAX });
+  const chips = presets().spots.map((n) => el("button", { type: "button", class: "chip", onclick: () => { name.value = n; err.textContent = ""; } }, n));
+  const create = async (ev, withDevices) => {
+    const base = name.value.trim(), n = Math.round(num("as-count"));
+    if (!base) { err.textContent = "Bitte eine Bezeichnung eingeben."; return; }
+    if (!(n >= 1 && n <= 50)) { err.textContent = "Anzahl zwischen 1 und 50 angeben."; return; }
+    if ((a.spots || []).length + n > 200) { err.textContent = "Höchstens 200 Prüfplätze je Raum."; return; }
+    const ids = Array.from({ length: n }, () => newId("s"));
+    for (const b of ev.target.parentElement.querySelectorAll("button")) b.disabled = true;
+    const ok = await editSpots(a, (spots) => {
+      const esc = base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const used = spots.map((s) => (s.name.match(new RegExp(`^${esc} (\\d+)$`)) || [])[1]).filter(Boolean).map(Number);
+      let next = used.length ? Math.max(...used) + 1 : 1;
+      const single = n === 1 && !spots.some((s) => s.name === base) && !used.length;
+      for (let i = 0; i < n; i++) spots.push({ id: ids[i], name: single ? base : `${base} ${next++}`, items: [], devices: 0,
+        status: "open", note: "", by: null, at: null });
+    }, withDevices ? null : (n === 1 ? "Prüfplatz angelegt" : `${n} Prüfplätze angelegt`));
+    for (const b of ev.target.parentElement.querySelectorAll("button")) b.disabled = false;
+    if (!ok) return;
+    if (withDevices) spotDevicesStep(a.id, ids); else backToRoom(a.id);
+  };
   openSheet("spot-add", el("div", { style: { display: "grid", gap: "12px" } },
     el("button", { type: "button", class: "back", onclick: () => backToRoom(a.id) }, `‹ ${a.name}`),
     el("h2", { id: "sheet-title" }, "Prüfplätze anlegen"),
     el("div", { class: "field" }, el("label", { for: "as-name" }, "Bezeichnung"), name, el("div", { class: "quick" }, chips)),
-    el("div", { class: "grid2" }, numField("as-count", "Anzahl", 1, 1, 1), numField("as-dev", "Geräte je Platz", 1, 1, 0)),
-    el("p", { class: "muted", style: { margin: 0, fontSize: "14px" } }, "Bei mehreren werden sie durchnummeriert, z. B. Arbeitsplatz 1 bis Arbeitsplatz 4. Die Punkte erscheinen im Raum und lassen sich unter ✎ Bearbeiten an ihre Stelle ziehen."),
+    numField("as-count", "Anzahl", 1, 1, 1),
+    el("p", { class: "muted", style: { margin: 0, fontSize: "14px" } }, "Bei mehreren werden sie durchnummeriert, z. B. Arbeitsplatz 1 bis Arbeitsplatz 4. Danach können Sie jedem Platz Geräte zuordnen."),
     err,
-    el("div", { class: "btn-row" }, el("button", { type: "button", class: "btn", onclick: () => backToRoom(a.id) }, "Abbrechen"),
+    el("div", { class: "btn-row" },
+      el("button", { type: "button", class: "btn", onclick: (ev) => create(ev, false) }, "Ohne Geräte anlegen"),
+      el("button", { type: "button", class: "btn primary", onclick: (ev) => create(ev, true) }, "Weiter: Geräte")),
+    el("button", { type: "button", class: "btn block", onclick: () => backToRoom(a.id) }, "Abbrechen")), { id: a.id, busy: true });
+}
+/** Optionaler Schritt nach dem Anlegen: jedem neuen Prüfplatz Geräte zuordnen. */
+function spotDevicesStep(areaId, ids) {
+  const a = S.areas.find((x) => x.id === areaId); if (!a) return;
+  const spots = ids.map((id) => (a.spots || []).find((s) => s.id === id)).filter(Boolean);
+  if (!spots.length) return backToRoom(areaId);
+  const work = Object.fromEntries(spots.map((s) => [s.id, cloneItems(s.items)]));
+  const open = new Set([spots[0].id]);
+  const err = el("p", { class: "err", role: "alert" });
+  const list = el("div", { class: "room-list" });
+  const draw = () => {
+    list.replaceChildren();
+    spots.forEach((s, i) => {
+      const items = work[s.id];
+      const sum = el("span", { class: "muted dev-sum" }, items.length ? devSummary(items) : "keine Geräte");
+      const isOpen = open.has(s.id);
+      list.append(el("div", { class: "room-card" },
+        el("button", { type: "button", class: "card-toggle", "aria-expanded": String(isOpen), onclick: () => { isOpen ? open.delete(s.id) : open.add(s.id); draw(); } },
+          el("strong", {}, s.name), el("span", { "aria-hidden": "true" }, isOpen ? "▴" : "▾")),
+        sum,
+        isOpen ? deviceEditor(items, () => { sum.textContent = items.length ? devSummary(items) : "keine Geräte"; }, `sd-${i}`) : null,
+        isOpen && i === 0 && spots.length > 1 ? el("button", { type: "button", class: "chip", onclick: () => {
+          for (const o of spots.slice(1)) work[o.id] = cloneItems(items);
+          draw(); toast(`Geräte von ${s.name} auf ${spots.length - 1} weitere Plätze übernommen`);
+        } }, `Für alle ${spots.length} Plätze übernehmen`) : null));
+    });
+  };
+  draw();
+  openSheet("spot-dev", el("div", { style: { display: "grid", gap: "12px" } },
+    el("button", { type: "button", class: "back", onclick: () => backToRoom(areaId) }, `‹ ${a.name}`),
+    el("h2", { id: "sheet-title" }, "Geräte zuordnen"),
+    el("p", { class: "sub" }, `${spots.length === 1 ? "Der neue Prüfplatz ist" : `Die ${spots.length} neuen Prüfplätze sind`} angelegt. Geräte per Eingabe oder Schnellauswahl hinzufügen – oder überspringen.`),
+    list, err,
+    el("div", { class: "btn-row" },
+      el("button", { type: "button", class: "btn", onclick: () => backToRoom(areaId) }, "Überspringen"),
       el("button", { type: "button", class: "btn primary", onclick: async (ev) => {
-        const base = name.value.trim(), n = Math.round(num("as-count")), dev = Math.max(0, Math.round(num("as-dev") || 0));
-        if (!base) { err.textContent = "Bitte eine Bezeichnung eingeben."; return; }
-        if (!(n >= 1 && n <= 50)) { err.textContent = "Anzahl zwischen 1 und 50 angeben."; return; }
-        if ((a.spots || []).length + n > 200) { err.textContent = "Höchstens 200 Prüfplätze je Raum."; return; }
         ev.target.disabled = true;
-        const ok = await editSpots(a, (spots) => {
-          const esc = base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-          const used = spots.map((s) => (s.name.match(new RegExp(`^${esc} (\\d+)$`)) || [])[1]).filter(Boolean).map(Number);
-          let next = used.length ? Math.max(...used) + 1 : 1;
-          const single = n === 1 && !spots.some((s) => s.name === base) && !used.length;
-          for (let i = 0; i < n; i++) spots.push({ id: newId("s"), name: single ? base : `${base} ${next++}`, devices: dev,
-            status: "open", note: "", by: null, at: null });
-        }, n === 1 ? "Prüfplatz angelegt" : `${n} Prüfplätze angelegt`);
+        const cur = S.areas.find((x) => x.id === areaId) || a;
+        const n = Object.values(work).reduce((s, it) => s + it.reduce((m, d) => m + (d.qty || 1), 0), 0);
+        const ok = await editSpots(cur, (all) => {
+          for (const x of all) if (work[x.id]) { x.items = work[x.id]; x.devices = devCount(x); }
+        }, n ? `${n} Geräte zugeordnet` : "Gespeichert");
         ev.target.disabled = false;
-        if (ok) backToRoom(a.id);
-      } }, "Anlegen"))), { id: a.id, busy: true });
+        if (ok) backToRoom(areaId); else err.textContent = "Nicht gespeichert – bitte erneut versuchen.";
+      } }, "Speichern"))), { id: areaId, busy: true });
 }
 function editSpotSheet(a, s) {
   const err = el("p", { class: "err", role: "alert" });
+  const items = cloneItems(s.items);
+  if (!s.items && s.devices) items.push({ id: newId("d"), name: "Gerät", qty: s.devices });   // ältere Plätze: nur Anzahl
   openSheet("spot-edit", el("div", { style: { display: "grid", gap: "12px" } },
     el("button", { type: "button", class: "back", onclick: () => backToRoom(a.id) }, `‹ ${a.name}`),
     el("h2", { id: "sheet-title" }, "Prüfplatz bearbeiten"),
     el("div", { class: "field" }, el("label", { for: "es-name" }, "Bezeichnung"), el("input", { id: "es-name", value: s.name })),
-    numField("es-dev", "Anzahl Geräte", s.devices || 0, 1, 0),
+    el("div", { class: "field" }, el("span", { class: "lbl" }, "Geräte"), deviceEditor(items, () => {}, "es")),
     s.rx != null ? el("button", { type: "button", class: "btn block", onclick: async () => {
       if (await editSpots(a, (spots) => { const x = spots.find((y) => y.id === s.id); if (x) { delete x.rx; delete x.ry; } }, "Position zurückgesetzt")) backToRoom(a.id);
     } }, "Position automatisch anordnen") : el("p", { class: "muted", style: { margin: 0, fontSize: "14px" } }, "Tipp: Unter ✎ Bearbeiten den Punkt im Grundriss an seine Stelle im Raum ziehen."),
@@ -1145,8 +1331,8 @@ function editSpotSheet(a, s) {
     el("div", { class: "btn-row" }, el("button", { type: "button", class: "btn", onclick: () => backToRoom(a.id) }, "Abbrechen"),
       el("button", { type: "button", class: "btn primary", onclick: async () => {
         const nm = $("#es-name").value.trim(); if (!nm) { err.textContent = "Bitte eine Bezeichnung eingeben."; return; }
-        const dev = Math.max(0, Math.round(num("es-dev") || 0));
-        if (await editSpots(a, (spots) => { const x = spots.find((y) => y.id === s.id); if (x) Object.assign(x, { name: nm, devices: dev }); }, "Gespeichert")) backToRoom(a.id);
+        const cur = S.areas.find((x) => x.id === a.id) || a;
+        if (await editSpots(cur, (spots) => { const x = spots.find((y) => y.id === s.id); if (x) { Object.assign(x, { name: nm, items: items.map((d) => ({ ...d })) }); x.devices = devCount(x); } }, "Gespeichert")) backToRoom(a.id);
       } }, "Speichern")),
     el("button", { type: "button", class: "btn danger block", onclick: async () => {
       if (await editSpots(a, (spots) => { const i = spots.findIndex((y) => y.id === s.id); if (i >= 0) spots.splice(i, 1); }, `„${s.name}“ gelöscht`)) backToRoom(a.id);
@@ -1267,14 +1453,18 @@ function confirmDeletePlan(plan) {
 }
 
 // ---------- Prüfplatz-Vorlage (für neue Räume und Raumreihen) ----------
-const DEFAULT_TPL = [{ name: "Arbeitsplatz", count: 2, devices: 3 }];
-const loadTpl = () => { const t = ls("tpl"); return Array.isArray(t) ? t.filter((x) => x && x.name) : DEFAULT_TPL.map((x) => ({ ...x })); };
+const DEFAULT_TPL = [{ name: "Arbeitsplatz", count: 2, items: [] }];
+const loadTpl = () => {
+  const t = ls("tpl");
+  return (Array.isArray(t) ? t.filter((x) => x && x.name) : DEFAULT_TPL).map((x) => ({ name: x.name, count: x.count ?? 1, items: cloneItems(x.items) }));
+};
 const tplTotal = (entries) => entries.reduce((n, e) => n + (e.count || 0), 0);
 /** Erzeugt die Prüfplätze eines Raums aus Einträgen {name, count, devices} – gleich mit fester Position. */
 function buildSpots(entries, w, h) {
   const list = [];
   for (const e of entries) for (let i = 1; i <= (e.count || 0); i++)
-    list.push({ id: newId("s"), name: e.count > 1 ? `${e.name} ${i}` : e.name, devices: e.devices || 0, status: "open", note: "", by: null, at: null });
+    list.push({ id: newId("s"), name: e.count > 1 ? `${e.name} ${i}` : e.name, items: cloneItems(e.items),
+      devices: (e.items || []).reduce((n, d) => n + (d.qty || 1), 0), status: "open", note: "", by: null, at: null });
   spotGrid(w, h, list.length).forEach((pos, i) => Object.assign(list[i], pos));
   return list;
 }
@@ -1288,26 +1478,34 @@ function stepper(value, min, max, onChange, label) {
 /** Editor für die Prüfplätze, die jeder neue Raum bekommt. entries wird direkt verändert. */
 function tplEditor(entries, onChange = () => {}) {
   const box = el("div", { class: "tpl" });
+  const open = new Set();
   const draw = () => {
     box.replaceChildren();
     entries.forEach((e, idx) => {
-      const name = el("input", { id: `tpl-n-${idx}`, value: e.name, "aria-label": "Bezeichnung", autocomplete: "off" });
+      e.items = e.items || [];
+      const name = el("input", { id: `tpl-n-${idx}`, value: e.name, "aria-label": "Bezeichnung", autocomplete: "off", maxlength: NAME_MAX });
       name.addEventListener("input", () => { e.name = name.value; onChange(); });
-      const dev = el("input", { id: `tpl-d-${idx}`, type: "number", inputmode: "numeric", min: 0, value: e.devices ?? 0, "aria-label": "Geräte je Platz" });
-      dev.addEventListener("input", () => { e.devices = Math.max(0, Math.round(Number(dev.value) || 0)); onChange(); });
+      const isOpen = open.has(e);
+      const devBtn = el("button", { type: "button", class: "tpl-devbtn", "aria-expanded": String(isOpen),
+        onclick: () => { isOpen ? open.delete(e) : open.add(e); draw(); } },
+        el("span", { class: "mono" }, String(e.items.reduce((n, d) => n + (d.qty || 1), 0))), el("span", {}, "Geräte"));
       box.append(el("div", { class: "tpl-row" }, name,
         stepper(e.count, 0, 50, (v) => { e.count = v; onChange(); }, `Anzahl ${e.name || "Prüfplatz"}`),
-        el("label", { class: "tpl-dev" }, dev, el("span", {}, "Geräte")),
+        devBtn,
         el("button", { type: "button", class: "tpl-del", "aria-label": `${e.name || "Eintrag"} entfernen`, onclick: () => { entries.splice(idx, 1); draw(); onChange(); } }, "×")));
+      if (isOpen) box.append(el("div", { class: "tpl-devs" },
+        el("span", { class: "muted", style: { fontSize: "13px" } }, `Geräte an jedem „${e.name || "Prüfplatz"}“:`),
+        deviceEditor(e.items, () => { devBtn.firstChild.textContent = String(e.items.reduce((n, d) => n + (d.qty || 1), 0)); onChange(); }, `tpl-dv-${idx}`)));
     });
     if (!entries.length) box.append(el("p", { class: "muted", style: { margin: 0, fontSize: "14px" } }, "Keine Prüfplätze – Räume werden leer angelegt."));
-    box.append(el("div", { class: "quick" }, SPOT_NAMES.map((n) => el("button", { type: "button", class: "chip",
-      onclick: () => { const ex = entries.find((x) => x.name === n); if (ex) ex.count = Math.min(50, ex.count + 1); else entries.push({ name: n, count: 1, devices: n === "Arbeitsplatz" ? 3 : 1 }); draw(); onChange(); } }, `＋ ${n}`))));
+    box.append(el("div", { class: "quick" }, presets().spots.map((n) => el("button", { type: "button", class: "chip",
+      onclick: () => { const ex = entries.find((x) => x.name === n); if (ex) ex.count = Math.min(50, ex.count + 1); else entries.push({ name: n, count: 1, items: [] }); draw(); onChange(); } }, `＋ ${n}`))));
   };
   draw();
   return box;
 }
-const cleanTpl = (entries) => entries.map((e) => ({ name: (e.name || "").trim(), count: Math.max(0, Math.min(50, e.count || 0)), devices: Math.max(0, e.devices || 0) }))
+const cleanTpl = (entries) => entries.map((e) => ({ name: (e.name || "").trim(), count: Math.max(0, Math.min(50, e.count || 0)),
+  items: (e.items || []).map((d) => ({ name: d.name, qty: d.qty || 1 })) }))
   .filter((e) => e.name && e.count > 0);
 
 function newRoomSheet(rect) {
@@ -1517,7 +1715,7 @@ function buildChips() {
 }
 function renderList() {
   const q = $("#search").value.trim().toLowerCase(), all = $("#list-all").checked || !S.me.id;
-  let items = S.areas.filter((a) => (all || mine(a)) && (!q || `${a.name} ${a.note} ${a.notes} ${(a.spots || []).map((s) => s.name + " " + (s.note || "")).join(" ")}`.toLowerCase().includes(q)));
+  let items = S.areas.filter((a) => (all || mine(a)) && (!q || `${a.name} ${a.note} ${a.notes} ${(a.spots || []).map((s) => s.name + " " + (s.note || "") + " " + devSummary(s.items)).join(" ")}`.toLowerCase().includes(q)));
   if (S.listStatus === "todo") items = items.filter((a) => a.status !== "done");
   else if (S.listStatus === "defect") items = items.filter((a) => spotStats(a).defect > 0);
   else if (S.listStatus) items = items.filter((a) => a.status === S.listStatus);
@@ -1553,8 +1751,8 @@ function renderMore() {
 // ======================================================================
 // Navigation, Hinweise, Start
 // ======================================================================
-const VIEWS = { plan: "plan", meine: "list", termine: "dates", mehr: "more" };
-const HASH = { plan: "plan", list: "meine", dates: "termine", more: "mehr" };
+const VIEWS = { plan: "plan", meine: "list", termine: "dates", einstellungen: "more", mehr: "more" };
+const HASH = { plan: "plan", list: "meine", dates: "termine", more: "einstellungen" };
 function setView(v, fromHash = false) {
   S.view = v;
   for (const k of ["plan", "list", "dates", "more"]) $("#view-" + k).hidden = k !== v;
